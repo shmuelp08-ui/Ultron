@@ -143,17 +143,17 @@ class MainActivity : Activity() {
         }
         apiKeyInput = EditText(this).apply {
             hint = if (UltronSettings.get(this@MainActivity, "openai_api_key").isNullOrBlank())
-                "Paste your OpenAI API key" else "API key saved — paste a new one to replace"
+                "Paste your free Groq API key" else "Groq key saved — paste a new one to replace"
             setTextColor(Color.WHITE)
             setHintTextColor(Color.GRAY)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
         }
         val saveKeyButton = Button(this).apply {
-            text = "SAVE AI KEY"
+            text = "SAVE GROQ KEY"
             setOnClickListener {
                 val key = apiKeyInput.text.toString().trim()
-                if (key.startsWith("sk-")) {
+                if (key.startsWith("gsk_")) {
                     UltronSettings.save(this@MainActivity, "openai_api_key", key)
                     apiKeyInput.setText("")
                     apiKeyInput.hint = "API key saved"
@@ -271,7 +271,7 @@ class MainActivity : Activity() {
         if (question.isBlank()) return
         val key = UltronSettings.get(this, "openai_api_key")
         if (key.isNullOrBlank()) {
-            chatHistory.append("\nYOU: $question\nULTRON: Add your OpenAI API key above first.")
+            chatHistory.append("\nYOU: $question\nULTRON: Add your Groq API key above first.")
             return
         }
         messageInput.setText("")
