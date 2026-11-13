@@ -341,8 +341,24 @@ class VoiceWakeService : Service() {
             return
         }
 
-        updateNotification("App not found: $appRequest")
-        UltronVoice.speak(this, "I could not find $appRequest. Try saying the app name again.")
+        // If it is not an app-launch request, treat it as a natural AI question.
+        val apiKey = UltronSettings.get(this, "openai_api_key")
+        if (apiKey.isNullOrBlank()) {
+            updateNotification("AI key needed — open ULTRON app")
+            UltronVoice.speak(this, "I can answer that, but first add your OpenAI API key in the ULTRON app.")
+            return
+        }
+
+        updateNotification("ULTRON is thinking...")
+        Thread {
+            val answer = AIController.ask(apiKey, command, UltronMemory.recall(this))
+            android.os.Handler(mainLooper).post {
+                if (active) {
+                    updateNotification(answer.take(120))
+                    UltronVoice.speak(this, answer)
+                }
+            }
+        }.start()
     }
 
     private fun openActivity(intent: Intent) {
