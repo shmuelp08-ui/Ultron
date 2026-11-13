@@ -31,10 +31,24 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Inspect project configuration
+        run: |
+          echo "===== CURRENT DIRECTORY ====="
+          pwd
+          echo "===== ROOT FILES ====="
+          ls -la
+          echo "===== SETTINGS FILE ====="
+          cat settings.gradle.kts
+          echo "===== ROOT BUILD FILE ====="
+          cat build.gradle.kts
+          echo "===== GRADLE SETTINGS SEARCH ====="
+          find . -name "settings.gradle*" -o -name "init.gradle*"
+
       - name: Build ULTRON
-        run: gradle --no-daemon --debug assembleDebug
+        run: gradle --no-daemon --stacktrace --info assembleDebug
 
       - name: Save APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ULTRON-APK
