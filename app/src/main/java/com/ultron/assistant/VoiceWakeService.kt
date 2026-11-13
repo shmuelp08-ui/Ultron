@@ -186,16 +186,14 @@ class VoiceWakeService : Service() {
                     override fun onResults(results: Bundle?) {
                         if (!active) return
 
-                        val spoken = results
+                        val spokenOptions = results
                             ?.getStringArrayList(
                                 SpeechRecognizer.RESULTS_RECOGNITION
                             )
-                            ?.firstOrNull()
-                            ?.trim()
-                            ?.lowercase()
-                            ?: ""
+                            ?.map { it.trim().lowercase() }
+                            ?: emptyList()
 
-                        processSpeech(spoken)
+                        processSpeech(spokenOptions)
                         restartListening(700)
                     }
 
@@ -249,33 +247,43 @@ class VoiceWakeService : Service() {
         }, delay)
     }
 
-    private fun processSpeech(spoken: String) {
-        if (spoken.isBlank()) return
+    private fun processSpeech(options: List<String>) {
+        if (options.isEmpty()) return
 
-        if (waitingForCommand) {
-            waitingForCommand = false
-            handleCommand(spoken)
-            return
-        }
+        // Try every recognition alternative; the first result is not always best.
+        for (spoken in options) {
+            if (spoken.isBlank()) continue
 
-        val wakeIndex = spoken.indexOf("ultron")
+            if (waitingForCommand) {
+                waitingForCommand = false
+                handleCommand(spoken)
+                return
+            }
 
-        if (wakeIndex >= 0) {
-            val command = spoken
-                .substring(wakeIndex + "ultron".length)
-                .trim()
-
-            if (command.isNotBlank()) {
-                handleCommand(command)
-            } else {
-                waitingForCommand = true
-                updateNotification("ULTRON activated — speak now")
+            val wakeIndex = spoken.indexOf("ultron")
+            if (wakeIndex >= 0) {
+                val command = spoken.substring(wakeIndex + "ultron".length).trim()
+                if (command.isNotBlank()) {
+                    handleCommand(command)
+                } else {
+                    waitingForCommand = true
+                    updateNotification("ULTRON activated — speak now")
+                }
+                return
             }
         }
     }
 
+    private fun normalizeCommand(value: String): String {
+        return value.lowercase()
+            .replace(Regex("[^a-z0-9 ]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
     private fun handleCommand(command: String) {
-        val spoken = command.lowercase().trim()
+        val spoken = normalizeCommand(command)
+        if (spoken.isBlank()) return
 
         if (spoken.contains("camera")) {
             openActivity(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE))
@@ -289,26 +297,47 @@ class VoiceWakeService : Service() {
             return
         }
 
-        for ((name, packageName) in apps) {
-            if (
-                spoken.contains("open $name") ||
-                spoken == name ||
-                spoken.contains("$name please")
-            ) {
-                val launchIntent =
-                    packageManager.getLaunchIntentForPackage(packageName)
+        // Strip common launch wording, then compare against installed app labels.
+        val appRequest = spoken
+            .replace(Regex("^(please )?(open|launch|start|run|go to)\\s+"), "")
+            .replace(Regex("\\s+(please|for me)$"), "")
+            .trim()
 
-                if (launchIntent != null) {
-                    openActivity(launchIntent)
-                    updateNotification("Opening $name")
-                } else {
-                    updateNotification("$name is not installed")
-                }
-                return
-            }
+        if (appRequest.isBlank()) {
+            updateNotification("Which app should I open?")
+            return
         }
 
-        updateNotification("Command not recognized: $spoken")
+        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val installedApps = packageManager.queryIntentActivities(launcherIntent, 0)
+
+        val match = installedApps
+            .mapNotNull { info ->
+                val label = info.loadLabel(packageManager)?.toString() ?: return@mapNotNull null
+                val normalizedLabel = normalizeCommand(label)
+                if (normalizedLabel.isBlank()) return@mapNotNull null
+                Triple(info.activityInfo.packageName, normalizedLabel, label)
+            }
+            .distinctBy { it.first }
+            .firstOrNull { (_, label, _) ->
+                label == appRequest ||
+                    appRequest == label.replace(" ", "") ||
+                    label.contains(appRequest) ||
+                    appRequest.contains(label)
+            }
+
+        if (match != null) {
+            val launchIntent = packageManager.getLaunchIntentForPackage(match.first)
+            if (launchIntent != null) {
+                openActivity(launchIntent)
+                updateNotification("Opening ${match.third}")
+            } else {
+                updateNotification("Can't launch ${match.third}")
+            }
+            return
+        }
+
+        updateNotification("App not found: $appRequest")
     }
 
     private fun openActivity(intent: Intent) {
