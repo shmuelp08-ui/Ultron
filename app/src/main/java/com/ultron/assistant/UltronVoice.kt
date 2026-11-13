@@ -22,6 +22,8 @@ object UltronVoice {
     fun speak(context: Context, text: String) {
         if (text.isBlank()) return
         val app = context.applicationContext
+        // Prefer the saved offline clone for every assistant response and spoken command.
+        if (VoiceCloneEngine.speak(app, text)) return
         val fishKey = UltronSettings.get(app, "fish_api_key")
         val voiceId = UltronSettings.get(app, "fish_voice_id")
         if (!fishKey.isNullOrBlank() && !voiceId.isNullOrBlank()) {
