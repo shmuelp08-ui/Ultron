@@ -31,6 +31,7 @@ class MainActivity : Activity() {
     private lateinit var apiKeyInput: EditText
     private lateinit var fishApiKeyInput: EditText
     private lateinit var fishVoiceIdInput: EditText
+    private var aiRequestInProgress = false
 
     private val refreshFeed = object : Runnable {
         override fun run() {
@@ -77,6 +78,7 @@ class MainActivity : Activity() {
         val startButton = Button(this).apply {
             text = "START VOICE LISTENING"
             setOnClickListener {
+                UltronSettings.save(this@MainActivity, "voice_enabled", "true")
                 startVoiceService()
             }
         }
@@ -84,6 +86,7 @@ class MainActivity : Activity() {
         val stopButton = Button(this).apply {
             text = "STOP VOICE LISTENING"
             setOnClickListener {
+                UltronSettings.save(this@MainActivity, "voice_enabled", "false")
                 val intent = Intent(
                     this@MainActivity,
                     VoiceWakeService::class.java
@@ -312,18 +315,31 @@ class MainActivity : Activity() {
     private fun sendToAI() {
         val question = messageInput.text.toString().trim()
         if (question.isBlank()) return
+        if (aiRequestInProgress) {
+            chatHistory.append("\nSYSTEM: Wait for the current response to finish.")
+            return
+        }
         val key = UltronSettings.get(this, "openai_api_key")
         if (key.isNullOrBlank()) {
             chatHistory.append("\nYOU: $question\nULTRON: Add your Groq API key above first.")
             return
         }
+        aiRequestInProgress = true
         messageInput.setText("")
         chatHistory.append("\nYOU: $question\nULTRON: Thinking...")
         Thread {
-            val answer = AIController.ask(key, question, UltronMemory.recall(this))
+            val answer = try {
+                AIController.ask(key, question, UltronMemory.recall(this))
+            } catch (e: Exception) {
+                "I couldn't complete that request. " + (e.localizedMessage ?: "Please try again.")
+            }
             handler.post {
                 val current = chatHistory.text.toString()
-                chatHistory.text = current.substringBeforeLast("ULTRON: Thinking...") + "ULTRON: $answer"
+                chatHistory.text = current.replaceFirst(
+                    "ULTRON: Thinking...",
+                    "ULTRON: $answer"
+                )
+                aiRequestInProgress = false
                 UltronVoice.speak(this, answer)
             }
         }.start()
@@ -353,7 +369,8 @@ class MainActivity : Activity() {
 
         if (
             checkSelfPermission(Manifest.permission.RECORD_AUDIO)
-            == PackageManager.PERMISSION_GRANTED
+            == PackageManager.PERMISSION_GRANTED &&
+            UltronSettings.get(this, "voice_enabled") != "false"
         ) {
             startVoiceService()
         }
