@@ -36,7 +36,7 @@ jobs:
           curl -I https://dl.google.com/dl/android/maven2/
 
       - name: Build ULTRON
-        run: gradle --no-daemon --stacktrace assembleDebug
+        run: gradle --no-daemon --stacktrace --info assembleDebug
 
       - name: Save APK
         uses: actions/upload-artifact@v4
