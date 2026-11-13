@@ -50,18 +50,36 @@ object UltronVoice {
                     }
                     val audio = connection.inputStream.use { it.readBytes() }
                     connection.disconnect()
-                    val file = File(app.cacheDir, "ultron_speech.mp3")
+                    if (audio.isEmpty()) throw IllegalStateException("Fish Audio returned an empty audio file.")
+                    val file = File.createTempFile("ultron_speech_", ".mp3", app.cacheDir)
                     file.writeBytes(audio)
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                         try {
-                            player?.release()
+                            player?.let { oldPlayer ->
+                                try { oldPlayer.stop() } catch (_: Exception) {}
+                                oldPlayer.release()
+                            }
                             player = MediaPlayer().apply {
                                 setDataSource(file.absolutePath)
-                                setOnCompletionListener { it.release(); if (player === it) player = null }
-                                prepare()
-                                start()
+                                setOnPreparedListener { prepared ->
+                                    if (player === prepared) prepared.start() else prepared.release()
+                                }
+                                setOnCompletionListener {
+                                    it.release()
+                                    file.delete()
+                                    if (player === it) player = null
+                                }
+                                setOnErrorListener { failed, _, _ ->
+                                    failed.release()
+                                    file.delete()
+                                    if (player === failed) player = null
+                                    speakNative(app, text)
+                                    true
+                                }
+                                prepareAsync()
                             }
                         } catch (_: Exception) {
+                            file.delete()
                             speakNative(app, text)
                         }
                     }
