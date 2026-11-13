@@ -28,7 +28,7 @@ class VoiceWakeService : Service() {
     private var waitingForCommand = false
     private var wakeLock: PowerManager.WakeLock? = null
     private val restartHandler = android.os.Handler(mainLooper)
-    private val restartTask = Runnable { if (active) listen() }
+    private val restartTask = Runnable { if (active) startRecognition() }
 
     private val apps = mapOf(
         "whatsapp" to "com.whatsapp",
