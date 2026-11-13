@@ -320,20 +320,52 @@ class MainActivity : Activity() {
             chatHistory.append("\nSYSTEM: Wait for the current response to finish.")
             return
         }
+        val normalizedQuestion = question.lowercase()
+        if (normalizedQuestion.contains("what time") ||
+            normalizedQuestion.contains("time is it") ||
+            normalizedQuestion.contains("current time") ||
+            normalizedQuestion == "the time") {
+            val now = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
+                .format(java.util.Date())
+            val answer = "It's $now."
+            UltronConversation.addTurn(this, "User", question)
+            UltronConversation.addTurn(this, "ULTRON", answer)
+            chatHistory.append("\\nYOU: $question\\nULTRON: $answer")
+            messageInput.setText("")
+            UltronVoice.speak(this, answer)
+            return
+        }
+        val rememberMatch = Regex("^(?:please )?remember(?: that)? (.+)$", RegexOption.IGNORE_CASE).find(question)
+        if (rememberMatch != null) {
+            val note = rememberMatch.groupValues[1].trim()
+            if (note.isNotBlank()) {
+                UltronMemory.remember(this, note)
+                val answer = "Got it. I'll remember that."
+                UltronConversation.addTurn(this, "User", question)
+                UltronConversation.addTurn(this, "ULTRON", answer)
+                chatHistory.append("\\nYOU: $question\\nULTRON: $answer")
+                messageInput.setText("")
+                UltronVoice.speak(this, answer)
+                return
+            }
+        }
         val key = UltronSettings.get(this, "openai_api_key")
         if (key.isNullOrBlank()) {
             chatHistory.append("\nYOU: $question\nULTRON: Add your Groq API key above first.")
             return
         }
         aiRequestInProgress = true
+        UltronConversation.addTurn(this, "User", question)
+        val recentConversation = UltronConversation.transcript(this)
         messageInput.setText("")
         chatHistory.append("\nYOU: $question\nULTRON: Thinking...")
         Thread {
             val answer = try {
-                AIController.ask(key, question, UltronMemory.recall(this))
+                AIController.ask(key, question, UltronMemory.recall(this), recentConversation)
             } catch (e: Exception) {
                 "I couldn't complete that request. " + (e.localizedMessage ?: "Please try again.")
             }
+            UltronConversation.addTurn(this, "ULTRON", answer)
             handler.post {
                 val current = chatHistory.text.toString()
                 chatHistory.text = current.replaceFirst(
