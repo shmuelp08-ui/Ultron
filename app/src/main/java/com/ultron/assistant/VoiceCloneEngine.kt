@@ -64,6 +64,14 @@ object VoiceCloneEngine {
                 }
                 status("Reading recording…")
                 val (samples, sampleRate) = decode(context, uri)
+                // Persist the reference so all future ULTRON replies can use this clone.
+                File(root, "reference.f32").outputStream().buffered().use { raw ->
+                    java.io.DataOutputStream(raw).use { out ->
+                        out.writeInt(samples.size)
+                        samples.forEach { out.writeFloat(it) }
+                    }
+                }
+                File(root, "reference.txt").writeText(referenceText.trim(), Charsets.UTF_8)
                 status("Cloning voice on this phone…")
                 val config = OfflineTtsConfig(
                     model = OfflineTtsModelConfig(
@@ -98,6 +106,63 @@ object VoiceCloneEngine {
                 status("Voice clone failed: \${e.message ?: e.javaClass.simpleName}")
             }
         }.start()
+    }
+
+    fun hasSavedVoice(context: Context): Boolean {
+        val root = File(context.filesDir, "ultron-voice-model")
+        return File(root, "reference.f32").isFile && File(root, "reference.txt").isFile
+    }
+
+    fun speak(context: Context, text: String): Boolean {
+        if (text.isBlank() || !hasSavedVoice(context)) return false
+        Thread {
+            var tts: OfflineTts? = null
+            try {
+                val root = File(context.filesDir, "ultron-voice-model")
+                val modelDir = File(root, MODEL)
+                val vocoder = File(root, "vocos_24khz.onnx")
+                check(File(modelDir, "tokens.txt").isFile &&
+                    File(modelDir, "encoder.int8.onnx").isFile &&
+                    File(modelDir, "decoder.int8.onnx").isFile && vocoder.isFile) {
+                    "Cloned voice model files are missing. Re-clone the voice."
+                }
+                val samples = java.io.DataInputStream(File(root, "reference.f32").inputStream().buffered()).use { input ->
+                    val count = input.readInt()
+                    require(count in 1..20_000_000) { "Saved voice recording is invalid." }
+                    FloatArray(count) { input.readFloat() }
+                }
+                val referenceText = File(root, "reference.txt").readText(Charsets.UTF_8)
+                val config = OfflineTtsConfig(
+                    model = OfflineTtsModelConfig(
+                        zipvoice = OfflineTtsZipVoiceModelConfig(
+                            tokens = File(modelDir, "tokens.txt").absolutePath,
+                            encoder = File(modelDir, "encoder.int8.onnx").absolutePath,
+                            decoder = File(modelDir, "decoder.int8.onnx").absolutePath,
+                            vocoder = vocoder.absolutePath,
+                            dataDir = File(modelDir, "espeak-ng-data").absolutePath,
+                            lexicon = File(modelDir, "lexicon.txt").absolutePath
+                        ),
+                        numThreads = 4, debug = false, provider = "cpu"
+                    ),
+                    maxNumSentences = 2
+                )
+                tts = OfflineTts(assetManager = null, config = config)
+                val audio = tts.generateWithConfig(
+                    text = text.take(1500),
+                    config = GenerationConfig(
+                        silenceScale = 1f, speed = 1f, sid = 0,
+                        referenceAudio = samples, referenceSampleRate = 24000,
+                        referenceText = referenceText, numSteps = 8, extra = emptyMap()
+                    )
+                )
+                play(audio.samples, audio.sampleRate)
+            } catch (e: Throwable) {
+                android.util.Log.e("ULTRON_VOICE", "Cloned speech failed", e)
+            } finally {
+                try { tts?.release() } catch (_: Exception) {}
+            }
+        }.start()
+        return true
     }
 
     private fun decode(context: Context, uri: Uri): Pair<FloatArray, Int> {
