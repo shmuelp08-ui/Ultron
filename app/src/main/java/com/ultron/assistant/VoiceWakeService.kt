@@ -287,6 +287,43 @@ class VoiceWakeService : Service() {
         val spoken = normalizeCommand(command)
         if (spoken.isBlank()) return
 
+        // Read the phone's real local clock; never ask the AI to guess the time.
+        if (spoken.matches(Regex(".*\\\\b(time is it|current time|tell me the time|what time|the time)\\\\b.*"))) {
+            val now = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
+                .format(java.util.Date())
+            val answer = "It's $now."
+            UltronConversation.addTurn(this, "User", command)
+            UltronConversation.addTurn(this, "ULTRON", answer)
+            updateNotification(answer)
+            UltronVoice.speak(this, answer)
+            return
+        }
+
+        // Explicit natural-language memory commands.
+        val rememberMatch = Regex("^(?:please )?remember(?: that)? (.+)$").find(spoken)
+        if (rememberMatch != null) {
+            val note = rememberMatch.groupValues[1].trim()
+            if (note.isNotBlank()) {
+                UltronMemory.remember(this, note)
+                val answer = "Got it. I'll remember that."
+                UltronConversation.addTurn(this, "User", command)
+                UltronConversation.addTurn(this, "ULTRON", answer)
+                updateNotification(answer)
+                UltronVoice.speak(this, answer)
+                return
+            }
+        }
+        if (spoken.contains("what do you remember") || spoken == "list my memories") {
+            val saved = UltronMemory.recall(this)
+            val answer = if (saved.isEmpty()) "I don't have any saved memories yet."
+                else "Here's what I remember: " + saved.takeLast(8).joinToString(". ")
+            UltronConversation.addTurn(this, "User", command)
+            UltronConversation.addTurn(this, "ULTRON", answer)
+            updateNotification(answer.take(120))
+            UltronVoice.speak(this, answer)
+            return
+        }
+
         if (spoken.contains("camera")) {
             openActivity(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE))
             updateNotification("Opening camera")
@@ -360,9 +397,17 @@ class VoiceWakeService : Service() {
             return
         }
 
+        UltronConversation.addTurn(this, "User", command)
+        val recentConversation = UltronConversation.transcript(this)
         updateNotification("ULTRON is thinking...")
         Thread {
-            val answer = AIController.ask(apiKey, command, UltronMemory.recall(this))
+            val answer = AIController.ask(
+                apiKey,
+                command,
+                UltronMemory.recall(this),
+                recentConversation
+            )
+            UltronConversation.addTurn(this, "ULTRON", answer)
             android.os.Handler(mainLooper).post {
                 if (active) {
                     updateNotification(answer.take(120))
