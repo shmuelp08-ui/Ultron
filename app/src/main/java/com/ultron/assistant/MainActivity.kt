@@ -12,6 +12,9 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.EditText
+import android.text.InputType
+import android.widget.ScrollView
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -23,6 +26,9 @@ class MainActivity : Activity() {
 
     private lateinit var status: TextView
     private lateinit var feed: TextView
+    private lateinit var chatHistory: TextView
+    private lateinit var messageInput: EditText
+    private lateinit var apiKeyInput: EditText
 
     private val refreshFeed = object : Runnable {
         override fun run() {
@@ -128,10 +134,66 @@ class MainActivity : Activity() {
         layout.addView(stopButton, buttonParams())
         layout.addView(notifications, buttonParams())
         layout.addView(appsButton, buttonParams())
+
+        val chatTitle = TextView(this).apply {
+            text = "\nULTRON AI CHAT"
+            textSize = 18f
+            setTextColor(cyan)
+            setPadding(0, 24, 0, 8)
+        }
+        apiKeyInput = EditText(this).apply {
+            hint = if (UltronSettings.get(this@MainActivity, "openai_api_key").isNullOrBlank())
+                "Paste your OpenAI API key" else "API key saved — paste a new one to replace"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+        }
+        val saveKeyButton = Button(this).apply {
+            text = "SAVE AI KEY"
+            setOnClickListener {
+                val key = apiKeyInput.text.toString().trim()
+                if (key.startsWith("sk-")) {
+                    UltronSettings.save(this@MainActivity, "openai_api_key", key)
+                    apiKeyInput.setText("")
+                    apiKeyInput.hint = "API key saved"
+                    chatHistory.append("\\nSYSTEM: AI key saved on this phone.")
+                } else {
+                    chatHistory.append("\\nSYSTEM: Paste a valid-looking API key first.")
+                }
+            }
+        }
+        chatHistory = TextView(this).apply {
+            text = "ULTRON AI online when an API key is configured."
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setPadding(8, 16, 8, 16)
+        }
+        messageInput = EditText(this).apply {
+            hint = "Message ULTRON..."
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        }
+        val sendButton = Button(this).apply {
+            text = "SEND TO ULTRON"
+            setOnClickListener { sendToAI() }
+        }
+
+        layout.addView(chatTitle)
+        layout.addView(apiKeyInput, buttonParams())
+        layout.addView(saveKeyButton, buttonParams())
+        layout.addView(chatHistory, buttonParams())
+        layout.addView(messageInput, buttonParams())
+        layout.addView(sendButton, buttonParams())
         layout.addView(feedTitle)
         layout.addView(feed)
 
-        setContentView(layout)
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            addView(layout)
+        }
+        setContentView(scroll)
 
         requestNeededPermissions()
     }
@@ -202,6 +264,26 @@ class MainActivity : Activity() {
         } else {
             status.text = "MICROPHONE PERMISSION REQUIRED"
         }
+    }
+
+    private fun sendToAI() {
+        val question = messageInput.text.toString().trim()
+        if (question.isBlank()) return
+        val key = UltronSettings.get(this, "openai_api_key")
+        if (key.isNullOrBlank()) {
+            chatHistory.append("\\nYOU: $question\\nULTRON: Add your OpenAI API key above first.")
+            return
+        }
+        messageInput.setText("")
+        chatHistory.append("\\nYOU: $question\\nULTRON: Thinking...")
+        Thread {
+            val answer = AIController.ask(key, question, UltronMemory.recall(this))
+            handler.post {
+                val current = chatHistory.text.toString()
+                chatHistory.text = current.substringBeforeLast("ULTRON: Thinking...") + "ULTRON: $answer"
+                UltronVoice.speak(this, answer)
+            }
+        }.start()
     }
 
     private fun updateFeed() {
