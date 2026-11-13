@@ -31,6 +31,10 @@ class MainActivity : Activity() {
     private lateinit var apiKeyInput: EditText
     private lateinit var fishApiKeyInput: EditText
     private lateinit var fishVoiceIdInput: EditText
+    private var cloneAudioUri: android.net.Uri? = null
+    private lateinit var cloneTranscriptInput: EditText
+    private lateinit var cloneOutputInput: EditText
+    private lateinit var cloneStatus: TextView
 
     private val refreshFeed = object : Runnable {
         override fun run() {
@@ -219,6 +223,66 @@ class MainActivity : Activity() {
             }
         }
 
+
+        val cloneTitle = TextView(this).apply {
+            text = "\nOFFLINE VOICE CLONING"
+            textSize = 18f
+            setTextColor(cyan)
+            setPadding(0, 28, 0, 8)
+        }
+        val chooseAudioButton = Button(this).apply {
+            text = "CHOOSE VOICE RECORDING"
+            setOnClickListener {
+                val pick = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "audio/*"
+                }
+                startActivityForResult(pick, 4201)
+            }
+        }
+        cloneTranscriptInput = EditText(this).apply {
+            hint = "Exact transcript of the recording"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 3
+        }
+        cloneOutputInput = EditText(this).apply {
+            hint = "What ULTRON should say in that voice"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 2
+        }
+        cloneStatus = TextView(this).apply {
+            text = "Choose a clean recording, then enter its exact transcript."
+            textSize = 13f
+            setTextColor(cyan)
+            setPadding(8, 12, 8, 12)
+        }
+        val cloneButton = Button(this).apply {
+            text = "CLONE VOICE & SPEAK"
+            setOnClickListener {
+                val uri = cloneAudioUri
+                if (uri == null) {
+                    cloneStatus.text = "Choose a voice recording first."
+                } else {
+                    cloneStatus.text = "Starting…"
+                    VoiceCloneEngine.cloneAndPlay(
+                        this@MainActivity, uri,
+                        cloneTranscriptInput.text.toString(),
+                        cloneOutputInput.text.toString()
+                    ) { message -> handler.post { cloneStatus.text = message } }
+                }
+            }
+        }
+        layout.addView(cloneTitle)
+        layout.addView(chooseAudioButton, buttonParams())
+        layout.addView(cloneTranscriptInput, buttonParams())
+        layout.addView(cloneOutputInput, buttonParams())
+        layout.addView(cloneButton, buttonParams())
+        layout.addView(cloneStatus, buttonParams())
+
         layout.addView(chatTitle)
         layout.addView(apiKeyInput, buttonParams())
         layout.addView(saveKeyButton, buttonParams())
@@ -239,6 +303,19 @@ class MainActivity : Activity() {
         setContentView(scroll)
 
         requestNeededPermissions()
+    }
+
+
+    @Deprecated("Legacy picker callback")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 4201 && resultCode == RESULT_OK) {
+            cloneAudioUri = data?.data
+            cloneAudioUri?.let { uri ->
+                runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                cloneStatus.text = "Recording selected ✓"
+            }
+        }
     }
 
     private fun requestNeededPermissions() {
