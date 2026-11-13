@@ -288,12 +288,14 @@ class VoiceWakeService : Service() {
         if (spoken.contains("camera")) {
             openActivity(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE))
             updateNotification("Opening camera")
+            UltronVoice.speak(this, "Opening camera.")
             return
         }
 
         if (spoken.contains("settings")) {
             openActivity(Intent(android.provider.Settings.ACTION_SETTINGS))
             updateNotification("Opening settings")
+            UltronVoice.speak(this, "Opening settings.")
             return
         }
 
@@ -305,6 +307,7 @@ class VoiceWakeService : Service() {
 
         if (appRequest.isBlank()) {
             updateNotification("Which app should I open?")
+            UltronVoice.speak(this, "Which app should I open?")
             return
         }
 
@@ -331,6 +334,7 @@ class VoiceWakeService : Service() {
             if (launchIntent != null) {
                 openActivity(launchIntent)
                 updateNotification("Opening ${match.third}")
+                UltronVoice.speak(this, "Opening ${match.third}.")
             } else {
                 updateNotification("Can't launch ${match.third}")
             }
@@ -338,6 +342,7 @@ class VoiceWakeService : Service() {
         }
 
         updateNotification("App not found: $appRequest")
+        UltronVoice.speak(this, "I could not find $appRequest. Try saying the app name again.")
     }
 
     private fun openActivity(intent: Intent) {
@@ -346,6 +351,7 @@ class VoiceWakeService : Service() {
             startActivity(intent)
         } catch (_: Exception) {
             updateNotification("Android blocked opening that app")
+            UltronVoice.speak(this, "Android blocked that action.")
         }
     }
 
@@ -354,6 +360,7 @@ class VoiceWakeService : Service() {
         recognizer?.cancel()
         recognizer?.destroy()
         recognizer = null
+        UltronVoice.stop()
 
         try {
             wakeLock?.release()
