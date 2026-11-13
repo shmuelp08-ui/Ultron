@@ -262,7 +262,7 @@ class MainActivity : Activity() {
 
         if (permissions.isNotEmpty()) {
             requestPermissions(permissions.toTypedArray(), 100)
-        } else {
+        } else if (UltronSettings.get(this, "voice_enabled") != "false") {
             startVoiceService()
         }
     }
@@ -304,7 +304,8 @@ class MainActivity : Activity() {
         if (
             requestCode == 100 &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO)
-                == PackageManager.PERMISSION_GRANTED
+                == PackageManager.PERMISSION_GRANTED &&
+            UltronSettings.get(this, "voice_enabled") != "false"
         ) {
             startVoiceService()
         } else {
