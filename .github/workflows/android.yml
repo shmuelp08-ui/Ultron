@@ -31,12 +31,8 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Check Google Maven access
-        run: |
-          curl -I https://dl.google.com/dl/android/maven2/
-
       - name: Build ULTRON
-        run: gradle --no-daemon --stacktrace --info assembleDebug
+        run: gradle --no-daemon --debug assembleDebug
 
       - name: Save APK
         uses: actions/upload-artifact@v4
