@@ -27,6 +27,8 @@ class VoiceWakeService : Service() {
     private var active = false
     private var waitingForCommand = false
     private var wakeLock: PowerManager.WakeLock? = null
+    private val restartHandler = android.os.Handler(mainLooper)
+    private val restartTask = Runnable { if (active) listen() }
 
     private val apps = mapOf(
         "whatsapp" to "com.whatsapp",
@@ -49,6 +51,9 @@ class VoiceWakeService : Service() {
     ): Int {
 
         if (intent?.action == ACTION_STOP) {
+            UltronSettings.save(this, "voice_enabled", "false")
+            active = false
+            restartHandler.removeCallbacksAndMessages(null)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -240,11 +245,8 @@ class VoiceWakeService : Service() {
     private fun restartListening(delay: Long) {
         if (!active) return
 
-        android.os.Handler(mainLooper).postDelayed({
-            if (active) {
-                listen()
-            }
-        }, delay)
+        restartHandler.removeCallbacks(restartTask)
+        restartHandler.postDelayed(restartTask, delay)
     }
 
     private fun processSpeech(options: List<String>) {
@@ -322,11 +324,20 @@ class VoiceWakeService : Service() {
                 Triple(info.activityInfo.packageName, normalizedLabel, label)
             }
             .distinctBy { it.first }
-            .firstOrNull { (_, label, _) ->
+            .filter { (_, label, _) ->
                 label == appRequest ||
-                    appRequest == label.replace(" ", "") ||
+                    appRequest.replace(" ", "") == label.replace(" ", "") ||
                     label.contains(appRequest) ||
                     appRequest.contains(label)
+            }
+            .minByOrNull { (_, label, _) ->
+                when {
+                    label == appRequest -> 0
+                    label.replace(" ", "") == appRequest.replace(" ", "") -> 1
+                    label.startsWith(appRequest) -> 2
+                    label.contains(appRequest) -> 3
+                    else -> 4
+                }
             }
 
         if (match != null) {
@@ -345,7 +356,7 @@ class VoiceWakeService : Service() {
         val apiKey = UltronSettings.get(this, "openai_api_key")
         if (apiKey.isNullOrBlank()) {
             updateNotification("AI key needed — open ULTRON app")
-            UltronVoice.speak(this, "I can answer that, but first add your OpenAI API key in the ULTRON app.")
+            UltronVoice.speak(this, "I can answer that, but first add your Groq API key in the ULTRON app.")
             return
         }
 
@@ -373,6 +384,7 @@ class VoiceWakeService : Service() {
 
     override fun onDestroy() {
         active = false
+        restartHandler.removeCallbacksAndMessages(null)
         recognizer?.cancel()
         recognizer?.destroy()
         recognizer = null
