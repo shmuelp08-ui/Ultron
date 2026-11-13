@@ -11,10 +11,21 @@ import android.widget.TextView
 import android.graphics.Color
 import android.view.Gravity
 import android.view.ViewGroup
+import android.os.Handler
+import android.os.Looper
 
 class MainActivity : Activity() {
 
     private val cyan = Color.rgb(0, 220, 255)
+    private lateinit var feed: TextView
+    private val handler = Handler(Looper.getMainLooper())
+
+    private val refresh = object : Runnable {
+        override fun run() {
+            updateFeed()
+            handler.postDelayed(this, 2000)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,13 +54,6 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
         }
 
-        val status = TextView(this).apply {
-            text = "\nSYSTEM ONLINE\n\nANDROID COMPANION INITIALIZED"
-            textSize = 15f
-            setTextColor(cyan)
-            gravity = Gravity.CENTER
-        }
-
         val notifications = Button(this).apply {
             text = "ENABLE WHATSAPP ACCESS"
             setOnClickListener {
@@ -67,14 +71,51 @@ class MainActivity : Activity() {
             }
         }
 
+        val feedTitle = TextView(this).apply {
+            text = "\nWHATSAPP NOTIFICATION FEED"
+            textSize = 16f
+            setTextColor(cyan)
+        }
+
+        feed = TextView(this).apply {
+            text = "Waiting for notifications..."
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setPadding(8, 16, 8, 16)
+        }
+
         layout.addView(title)
         layout.addView(subtitle)
-        layout.addView(status)
-
         layout.addView(notifications, buttonParams())
         layout.addView(apps, buttonParams())
+        layout.addView(feedTitle)
+        layout.addView(feed)
 
         setContentView(layout)
+    }
+
+    private fun updateFeed() {
+        val messages = synchronized(
+            WhatsAppNotificationListener.recentNotifications
+        ) {
+            WhatsAppNotificationListener.recentNotifications.toList()
+        }
+
+        feed.text = if (messages.isEmpty()) {
+            "No WhatsApp notifications received yet."
+        } else {
+            messages.joinToString("\n\n")
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        handler.post(refresh)
+    }
+
+    override fun onPause() {
+        handler.removeCallbacks(refresh)
+        super.onPause()
     }
 
     private fun buttonParams() =
