@@ -29,6 +29,8 @@ class MainActivity : Activity() {
     private lateinit var chatHistory: TextView
     private lateinit var messageInput: EditText
     private lateinit var apiKeyInput: EditText
+    private lateinit var fishApiKeyInput: EditText
+    private lateinit var fishVoiceIdInput: EditText
 
     private val refreshFeed = object : Runnable {
         override fun run() {
@@ -180,9 +182,50 @@ class MainActivity : Activity() {
             setOnClickListener { sendToAI() }
         }
 
+        val fishTitle = TextView(this).apply {
+            text = "\nFISH AUDIO VOICE"
+            textSize = 18f
+            setTextColor(cyan)
+            setPadding(0, 24, 0, 8)
+        }
+        fishApiKeyInput = EditText(this).apply {
+            hint = if (UltronSettings.get(this@MainActivity, "fish_api_key").isNullOrBlank())
+                "Fish Audio API key" else "Fish Audio key saved"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+        }
+        fishVoiceIdInput = EditText(this).apply {
+            hint = if (UltronSettings.get(this@MainActivity, "fish_voice_id").isNullOrBlank())
+                "Fish Audio voice model ID" else "Voice ID saved — enter to replace"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            inputType = InputType.TYPE_CLASS_TEXT
+            setSingleLine(true)
+        }
+        val saveFishButton = Button(this).apply {
+            text = "SAVE FISH AUDIO VOICE"
+            setOnClickListener {
+                val key = fishApiKeyInput.text.toString().trim()
+                val voiceId = fishVoiceIdInput.text.toString().trim()
+                if (key.isNotBlank()) UltronSettings.save(this@MainActivity, "fish_api_key", key)
+                if (voiceId.isNotBlank()) UltronSettings.save(this@MainActivity, "fish_voice_id", voiceId)
+                fishApiKeyInput.setText("")
+                fishVoiceIdInput.setText("")
+                fishApiKeyInput.hint = "Fish Audio key saved"
+                fishVoiceIdInput.hint = "Voice ID saved"
+                chatHistory.append("\nSYSTEM: Fish Audio voice settings saved.")
+            }
+        }
+
         layout.addView(chatTitle)
         layout.addView(apiKeyInput, buttonParams())
         layout.addView(saveKeyButton, buttonParams())
+        layout.addView(fishTitle)
+        layout.addView(fishApiKeyInput, buttonParams())
+        layout.addView(fishVoiceIdInput, buttonParams())
+        layout.addView(saveFishButton, buttonParams())
         layout.addView(chatHistory, buttonParams())
         layout.addView(messageInput, buttonParams())
         layout.addView(sendButton, buttonParams())
