@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get ULTRON code
+      - name: Checkout ULTRON
         uses: actions/checkout@v4
 
       - name: Set up Java
@@ -28,12 +28,15 @@ jobs:
 
       - name: Configure Android SDK
         run: |
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Check Google Maven access
+        run: |
+          curl -I https://dl.google.com/dl/android/maven2/
+
       - name: Build ULTRON
-        run: gradle assembleDebug
+        run: gradle --no-daemon --stacktrace assembleDebug
 
       - name: Save APK
         uses: actions/upload-artifact@v4
