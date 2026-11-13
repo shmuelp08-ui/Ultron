@@ -146,8 +146,9 @@ object VoiceCloneEngine {
                     ),
                     maxNumSentences = 2
                 )
-                tts = OfflineTts(assetManager = null, config = config)
-                val audio = tts.generateWithConfig(
+                val engine = OfflineTts(assetManager = null, config = config)
+                tts = engine
+                val audio = engine.generateWithConfig(
                     text = text.take(1500),
                     config = GenerationConfig(
                         silenceScale = 1f, speed = 1f, sid = 0,
