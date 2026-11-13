@@ -1,29 +1,19 @@
 pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-
+    repositories { google(); mavenCentral(); gradlePluginPortal() }
     resolutionStrategy {
         eachPlugin {
-            if (requested.id.id == "com.android.application") {
-                useModule("com.android.tools.build:gradle:${requested.version}")
-            }
-            if (requested.id.id == "org.jetbrains.kotlin.android") {
-                useModule("org.jetbrains.kotlin.android:org.jetbrains.kotlin.android.gradle.plugin:${requested.version}")
-            }
+            if (requested.id.id == "com.android.application") useModule("com.android.tools.build:gradle:${requested.version}")
+            if (requested.id.id == "org.jetbrains.kotlin.android") useModule("org.jetbrains.kotlin.android:org.jetbrains.kotlin.android.gradle.plugin:${requested.version}")
         }
     }
 }
-
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://xdcobra.github.io/maven/") }
     }
 }
-
 rootProject.name = "Ultron"
 include(":app")
