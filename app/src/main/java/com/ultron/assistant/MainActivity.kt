@@ -157,9 +157,9 @@ class MainActivity : Activity() {
                     UltronSettings.save(this@MainActivity, "openai_api_key", key)
                     apiKeyInput.setText("")
                     apiKeyInput.hint = "API key saved"
-                    chatHistory.append("\\nSYSTEM: AI key saved on this phone.")
+                    chatHistory.append("\nSYSTEM: AI key saved on this phone.")
                 } else {
-                    chatHistory.append("\\nSYSTEM: Paste a valid-looking API key first.")
+                    chatHistory.append("\nSYSTEM: Paste a valid-looking API key first.")
                 }
             }
         }
@@ -271,11 +271,11 @@ class MainActivity : Activity() {
         if (question.isBlank()) return
         val key = UltronSettings.get(this, "openai_api_key")
         if (key.isNullOrBlank()) {
-            chatHistory.append("\\nYOU: $question\\nULTRON: Add your OpenAI API key above first.")
+            chatHistory.append("\nYOU: $question\nULTRON: Add your OpenAI API key above first.")
             return
         }
         messageInput.setText("")
-        chatHistory.append("\\nYOU: $question\\nULTRON: Thinking...")
+        chatHistory.append("\nYOU: $question\nULTRON: Thinking...")
         Thread {
             val answer = AIController.ask(key, question, UltronMemory.recall(this))
             handler.post {
