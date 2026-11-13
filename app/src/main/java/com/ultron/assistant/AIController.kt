@@ -5,7 +5,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object AIController {
-    fun ask(apiKey: String, message: String, memory: List<String> = emptyList()): String {
+    fun ask(apiKey: String, message: String, memory: List<String> = emptyList(), conversation: String = ""): String {
         var connection: HttpURLConnection? = null
         return try {
             connection = (URL("https://api.groq.com/openai/v1/responses").openConnection() as HttpURLConnection).apply {
@@ -27,7 +27,15 @@ object AIController {
             val body = JSONObject()
                 .put("model", "openai/gpt-oss-120b")
                 .put("instructions", instructions)
-                .put("input", message)
+                .put("input", buildString {
+                    if (conversation.isNotBlank()) {
+                        append("Recent conversation:\\n")
+                        append(conversation)
+                        append("\\n\\n")
+                    }
+                    append("Current message: ")
+                    append(message)
+                })
                 .put("store", false)
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val code = connection.responseCode
