@@ -8,7 +8,7 @@ object AIController {
     fun ask(apiKey: String, message: String, memory: List<String> = emptyList()): String {
         var connection: HttpURLConnection? = null
         return try {
-            connection = (URL("https://api.openai.com/v1/responses").openConnection() as HttpURLConnection).apply {
+            connection = (URL("https://api.groq.com/openai/v1/responses").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 setRequestProperty("Authorization", "Bearer $apiKey")
                 setRequestProperty("Content-Type", "application/json")
@@ -25,7 +25,7 @@ object AIController {
                 ${memory.takeLast(30).joinToString("\n")}
             """.trimIndent()
             val body = JSONObject()
-                .put("model", "gpt-6-astra")
+                .put("model", "openai/gpt-oss-120b")
                 .put("instructions", instructions)
                 .put("input", message)
                 .put("store", false)
@@ -35,7 +35,7 @@ object AIController {
             val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
             if (code !in 200..299) {
                 val detail = try { JSONObject(response).optJSONObject("error")?.optString("message") } catch (_: Exception) { null }
-                return "AI request failed ($code): ${detail?.takeIf { it.isNotBlank() } ?: "Check your API key and account billing."}"
+                return "AI request failed ($code): ${detail?.takeIf { it.isNotBlank() } ?: "Check your Groq API key and free-tier limits."}"
             }
             val output = JSONObject(response).optJSONArray("output") ?: return "I received an empty response."
             val result = StringBuilder()
