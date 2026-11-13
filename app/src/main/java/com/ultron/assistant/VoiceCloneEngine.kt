@@ -86,8 +86,8 @@ object VoiceCloneEngine {
                     text = outputText,
                     config = GenerationConfig(
                         silenceScale = 1f, speed = 1f, sid = 0,
-                        referenceAudio = samples, referenceSampleRate = sampleRate,
-                        referenceText = referenceText.trim(), numSteps = 4, extra = emptyMap()
+                        referenceAudio = samples, referenceSampleRate = 24000,
+                        referenceText = referenceText.trim(), numSteps = 8, extra = emptyMap()
                     )
                 )
                 status("Playing cloned voice…")
@@ -163,7 +163,29 @@ object VoiceCloneEngine {
                 i += channels
             }
         }
-        return mono to rate
+        return resampleAndClean(mono, rate, 24000) to 24000
+    }
+
+    // ZipVoice's reference prompts are expected as clean mono 24 kHz audio.
+    private fun resampleAndClean(input: FloatArray, sourceRate: Int, targetRate: Int): FloatArray {
+        if (input.isEmpty() || sourceRate <= 0) error("Recording contains no usable audio.")
+        var first = 0
+        var last = input.lastIndex
+        while (first < last && kotlin.math.abs(input[first]) < 0.012f) first++
+        while (last > first && kotlin.math.abs(input[last]) < 0.012f) last--
+        val trimmed = input.copyOfRange(first, last + 1)
+        val peak = trimmed.maxOf { kotlin.math.abs(it) }
+        if (peak < 0.02f) error("Recording is too quiet. Use a clearer voice recording.")
+        val normalized = FloatArray(trimmed.size) { (trimmed[it] / peak * 0.85f).coerceIn(-1f, 1f) }
+        if (sourceRate == targetRate) return normalized
+        val outputSize = (normalized.size.toLong() * targetRate / sourceRate).toInt().coerceAtLeast(1)
+        return FloatArray(outputSize) { i ->
+            val position = i.toDouble() * sourceRate / targetRate
+            val left = position.toInt().coerceIn(0, normalized.lastIndex)
+            val right = (left + 1).coerceAtMost(normalized.lastIndex)
+            val fraction = (position - left).toFloat()
+            normalized[left] * (1f - fraction) + normalized[right] * fraction
+        }
     }
 
     private fun play(samples: FloatArray, sampleRate: Int) {
