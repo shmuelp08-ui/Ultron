@@ -208,7 +208,7 @@ class MainActivity : Activity() {
 
         val quick = panelCard()
         quick.addView(sectionTitle("⌘  QUICK LAUNCH"))
-        val apps = installedApps().take(8)
+        val apps = installedApps().take(24)
         val appGrid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         apps.chunked(4).forEach { group ->
             val r = row()
@@ -521,7 +521,7 @@ class MainActivity : Activity() {
         return try {
             packageManager.queryIntentActivities(intent, 0)
                 .mapNotNull { it.loadLabel(packageManager)?.toString() }
-                .distinct().sorted().take(8)
+                .distinct().sorted()
         } catch (_: Exception) { emptyList() }
     }
 
