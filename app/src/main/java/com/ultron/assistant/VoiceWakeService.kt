@@ -389,7 +389,7 @@ class VoiceWakeService : Service() {
                 UltronConversation.addTurn(this, "User", command)
                 UltronConversation.addTurn(this, "ULTRON", answer)
                 updateNotification(answer)
-                UltronVoice.speak(this, answer)
+                speakResponse(answer)
                 return
             }
         }
@@ -400,7 +400,7 @@ class VoiceWakeService : Service() {
             UltronConversation.addTurn(this, "User", command)
             UltronConversation.addTurn(this, "ULTRON", answer)
             updateNotification(answer.take(120))
-            UltronVoice.speak(this, answer)
+            speakResponse(answer)
             return
         }
 
@@ -430,21 +430,21 @@ class VoiceWakeService : Service() {
             val success = UltronAccessibilityService.perform(globalAction)
             val message = if (success) "Phone action completed." else "Enable ULTRON Phone Control in Android Accessibility settings first."
             updateNotification(message)
-            UltronVoice.speak(this, message)
+            speakResponse(message)
             return
         }
 
         if (spoken.contains("camera")) {
             openActivity(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE))
             updateNotification("Opening camera")
-            UltronVoice.speak(this, "Opening camera.")
+            speakResponse("Opening camera.")
             return
         }
 
         if (spoken.contains("settings")) {
             openActivity(Intent(android.provider.Settings.ACTION_SETTINGS))
             updateNotification("Opening settings")
-            UltronVoice.speak(this, "Opening settings.")
+            speakResponse("Opening settings.")
             return
         }
 
@@ -462,17 +462,17 @@ class VoiceWakeService : Service() {
             if (aliasIntent != null) {
                 openActivity(aliasIntent)
                 updateNotification("Opening " + appRequest)
-                UltronVoice.speak(this, "Opening " + appRequest + ".")
+                speakResponse("Opening " + appRequest + ".")
             } else {
                 updateNotification(appRequest + " is not installed or cannot be launched")
-                UltronVoice.speak(this, appRequest + " is not available on this phone.")
+                speakResponse(appRequest + " is not available on this phone.")
             }
             return
         }
 
         if (appRequest.isBlank()) {
             updateNotification("Which app should I open?")
-            UltronVoice.speak(this, "Which app should I open?")
+            speakResponse("Which app should I open?")
             return
         }
 
@@ -510,7 +510,7 @@ class VoiceWakeService : Service() {
             if (launchIntent != null) {
                 openActivity(launchIntent)
                 updateNotification("Opening ${match.third}")
-                UltronVoice.speak(this, "Opening ${match.third}.")
+                speakResponse("Opening ${match.third}.")
             } else {
                 updateNotification("Can't launch ${match.third}")
             }
@@ -521,7 +521,7 @@ class VoiceWakeService : Service() {
         val apiKey = UltronSettings.get(this, "openai_api_key")
         if (apiKey.isNullOrBlank()) {
             updateNotification("AI key needed — open ULTRON app")
-            UltronVoice.speak(this, "I can answer that, but first add your Groq API key in the ULTRON app.")
+            speakResponse("I can answer that, but first add your Groq API key in the ULTRON app.")
             return
         }
 
@@ -539,7 +539,7 @@ class VoiceWakeService : Service() {
             android.os.Handler(mainLooper).post {
                 if (active) {
                     updateNotification(answer.take(120))
-                    UltronVoice.speak(this, answer)
+                    speakResponse(answer)
                 }
             }
         }.start()
@@ -577,23 +577,23 @@ class VoiceWakeService : Service() {
                 "I've prepared that message in WhatsApp. Review it and tap Send."
             }
             updateNotification(response)
-            UltronVoice.speak(this, response)
+            speakResponse(response)
         } catch (_: android.content.ActivityNotFoundException) {
             try {
                 val browserIntent = Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 startActivity(browserIntent)
                 val response = "WhatsApp isn't available to open directly. I opened the chat link in your browser."
                 updateNotification(response)
-                UltronVoice.speak(this, response)
+                speakResponse(response)
             } catch (_: Exception) {
                 val response = "I couldn't open WhatsApp. Check that it's installed."
                 updateNotification(response)
-                UltronVoice.speak(this, response)
+                speakResponse(response)
             }
         } catch (_: Exception) {
             val response = "I couldn't open that WhatsApp chat."
             updateNotification(response)
-            UltronVoice.speak(this, response)
+            speakResponse(response)
         }
     }
 
@@ -603,7 +603,7 @@ class VoiceWakeService : Service() {
             startActivity(intent)
         } catch (_: Exception) {
             updateNotification("Android blocked opening that app")
-            UltronVoice.speak(this, "Android blocked that action.")
+            speakResponse("Android blocked that action.")
         }
     }
 
