@@ -38,7 +38,7 @@ object AssemblyAITTS {
                     .put("voice", voiceId)
                     .put("input", text.take(5000))
                     .put("response_format", "mp3")
-                    .put("extra_body", JSONObject().put("extend_biometric_consent", true))
+                    
                 connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
                 val code = connection.responseCode
                 if (code !in 200..299) {
