@@ -411,6 +411,30 @@ class VoiceWakeService : Service() {
             return
         }
 
+        // Android screen capture commands.
+        if (spoken.contains("screenshot") || spoken.contains("screen shot") ||
+            spoken.contains("capture screen") || spoken.contains("take a picture of my screen")) {
+            val started = UltronAccessibilityService.captureScreenshot { success, message ->
+                updateNotification(message)
+                speakResponse(message)
+                UltronConversation.addTurn(this, "ULTRON", message)
+            }
+            if (!started) {
+                val message = "Enable ULTRON Phone Control in Android Accessibility settings to take screenshots by voice."
+                updateNotification(message)
+                speakResponse(message)
+            }
+            return
+        }
+
+        if (spoken.contains("screen recording") || spoken.contains("record my screen") ||
+            spoken.contains("start recording my screen")) {
+            val message = "Android requires its own screen-sharing approval before every new recording session. ULTRON cannot bypass that system security prompt. I can start a recording only after you approve it."
+            updateNotification(message)
+            speakResponse(message)
+            return
+        }
+
         // WhatsApp contact navigation is driven through the user-enabled Accessibility bridge.
         if (handleWhatsAppCommand(spoken)) return
 
