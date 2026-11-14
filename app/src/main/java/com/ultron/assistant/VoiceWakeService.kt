@@ -30,6 +30,7 @@ class VoiceWakeService : Service() {
     private var recognitionGeneration = 0
     private var active = false
     private var waitingForCommand = false
+    @Volatile private var voicePauseUntil = 0L
     private var wakeLock: PowerManager.WakeLock? = null
     // Service Context is not attached during construction; initialize Handler in onCreate.
     private lateinit var restartHandler: android.os.Handler
@@ -187,6 +188,11 @@ class VoiceWakeService : Service() {
 
     private fun startRecognition() {
         if (!active) return
+        val pauseRemaining = voicePauseUntil - android.os.SystemClock.elapsedRealtime()
+        if (pauseRemaining > 0L) {
+            restartListening(pauseRemaining + 250L)
+            return
+        }
 
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             UltronSettings.save(this, "voice_status", "SPEECH RECOGNITION UNAVAILABLE — RETRYING")
@@ -369,7 +375,7 @@ class VoiceWakeService : Service() {
             UltronConversation.addTurn(this, "User", command)
             UltronConversation.addTurn(this, "ULTRON", answer)
             updateNotification(answer)
-            UltronVoice.speak(this, answer)
+            speakResponse(answer)
             return
         }
 
@@ -599,6 +605,13 @@ class VoiceWakeService : Service() {
             updateNotification("Android blocked opening that app")
             UltronVoice.speak(this, "Android blocked that action.")
         }
+    }
+
+    // Prevent the recognizer from hearing ULTRON's own spoken reply as a new command.
+    private fun speakResponse(text: String) {
+        voicePauseUntil = android.os.SystemClock.elapsedRealtime() +
+            maxOf(2500L, text.length * 85L)
+        UltronVoice.speak(this, text)
     }
 
     private fun releaseWakeLock() {
