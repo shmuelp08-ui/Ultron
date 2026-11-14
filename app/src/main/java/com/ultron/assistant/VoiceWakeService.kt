@@ -382,6 +382,24 @@ class VoiceWakeService : Service() {
             return
         }
 
+        // Phone-wide navigation is available only after the user enables ULTRON Accessibility.
+        val globalAction = when {
+            spoken in listOf("go home", "home screen", "open home screen") -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME
+            spoken in listOf("go back", "back", "press back") -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
+            spoken.contains("recent apps") || spoken == "show recent" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS
+            spoken.contains("show notifications") || spoken == "open notifications" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS
+            spoken.contains("quick settings") || spoken == "open control panel" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS
+            spoken == "lock phone" || spoken == "lock screen" -> if (android.os.Build.VERSION.SDK_INT >= 28) android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN else -1
+            else -> -1
+        }
+        if (globalAction != -1) {
+            val success = UltronAccessibilityService.perform(globalAction)
+            val message = if (success) "Phone action completed." else "Enable ULTRON Phone Control in Android Accessibility settings first."
+            updateNotification(message)
+            UltronVoice.speak(this, message)
+            return
+        }
+
         if (spoken.contains("camera")) {
             openActivity(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE))
             updateNotification("Opening camera")
@@ -399,6 +417,7 @@ class VoiceWakeService : Service() {
         // Strip common launch wording, then compare against installed app labels.
         val appRequest = spoken
             .replace(Regex("^(please )?(open|launch|start|run|go to)\\s+"), "")
+            .replace(Regex("^the\\s+"), "")
             .replace(Regex("\\s+(please|for me)$"), "")
             .trim()
 
@@ -426,6 +445,7 @@ class VoiceWakeService : Service() {
         val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val installedApps = packageManager.queryIntentActivities(launcherIntent, 0)
 
+        val compactRequest = appRequest.replace(" ", "")
         val match = installedApps
             .mapNotNull { info ->
                 val label = info.loadLabel(packageManager)?.toString() ?: return@mapNotNull null
@@ -435,15 +455,16 @@ class VoiceWakeService : Service() {
             }
             .distinctBy { it.first }
             .filter { (_, label, _) ->
-                label == appRequest ||
-                    appRequest.replace(" ", "") == label.replace(" ", "") ||
-                    label.contains(appRequest) ||
-                    appRequest.contains(label)
+                val compactLabel = label.replace(" ", "")
+                label == appRequest || compactLabel == compactRequest ||
+                    label.startsWith(appRequest) || label.contains(appRequest) ||
+                    (appRequest.length >= 4 && appRequest.contains(label))
             }
             .minByOrNull { (_, label, _) ->
+                val compactLabel = label.replace(" ", "")
                 when {
                     label == appRequest -> 0
-                    label.replace(" ", "") == appRequest.replace(" ", "") -> 1
+                    compactLabel == compactRequest -> 1
                     label.startsWith(appRequest) -> 2
                     label.contains(appRequest) -> 3
                     else -> 4
