@@ -204,30 +204,31 @@ class MainActivity : Activity() {
 
     private fun requestRuntimePermissions() {
         val ask = mutableListOf<String>()
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) ask.add(Manifest.permission.RECORD_AUDIO)
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) ask.add(Manifest.permission.POST_NOTIFICATIONS)
         if (checkSelfPermission(Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) ask.add(Manifest.permission.READ_CALENDAR)
         if (ask.isNotEmpty()) requestPermissions(ask.toTypedArray(), 77)
-        else startVoiceIfEnabled()
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, results: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, results)
         if (requestCode == 77) {
             refreshAgenda()
-            startVoiceIfEnabled()
+            if (UltronSettings.get(this, "voice_enabled") == "true" &&
+                checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                startVoiceIfEnabled()
+            }
         }
     }
 
     private fun startVoiceIfEnabled() {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
-            UltronSettings.get(this, "voice_enabled") != "false") {
+            UltronSettings.get(this, "voice_enabled") == "true") {
             try { startForegroundService(Intent(this, VoiceWakeService::class.java)) } catch (_: Exception) { }
         }
     }
 
     private fun toggleVoice() {
-        val enabled = UltronSettings.get(this, "voice_enabled") != "false"
+        val enabled = UltronSettings.get(this, "voice_enabled") == "true"
         if (enabled) {
             UltronSettings.save(this, "voice_enabled", "false")
             startService(Intent(this, VoiceWakeService::class.java).setAction(VoiceWakeService.ACTION_STOP))
