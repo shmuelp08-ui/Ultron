@@ -520,14 +520,44 @@ class MainActivity : Activity() {
     }
 
     private fun configureAssemblyAIVoice() {
-        showFeature(
-            "ASSEMBLYAI VOICE CLONE",
-            "Fish Audio has been removed from ULTRON's active voice path. Create a voice clone in your AssemblyAI dashboard using a recording you have permission to use, then copy its Voice ID. AssemblyAI currently creates the clone in its dashboard; ULTRON uses the ID to generate every spoken reply."
+        val fields = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
+        }
+        val instructions = text(
+            "1. Open your AssemblyAI dashboard and create a voice clone from a recording you have permission to use.\n2. Copy the cloned voice ID.\n3. Paste your API key and voice ID below. ULTRON will use that exact voice for spoken replies.",
+            13f, Color.WHITE
         )
-        credentialDialog("AssemblyAI API key", "assemblyai_api_key")
-        handler.postDelayed({
-            credentialDialog("AssemblyAI cloned voice ID", "assemblyai_voice_id")
-        }, 350)
+        fields.addView(instructions, buttonParams())
+        val apiKeyField = EditText(this).apply {
+            hint = "AssemblyAI API key"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            inputType = 129
+            setText(UltronSettings.get(this@MainActivity, "assemblyai_api_key") ?: "")
+        }
+        fields.addView(apiKeyField, buttonParams())
+        val voiceIdField = EditText(this).apply {
+            hint = "Cloned voice ID"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            setText(UltronSettings.get(this@MainActivity, "assemblyai_voice_id") ?: "")
+        }
+        fields.addView(voiceIdField, buttonParams())
+        AlertDialog.Builder(this).setTitle("ASSEMBLYAI CLONED VOICE")
+            .setView(fields)
+            .setPositiveButton("SAVE & ACTIVATE") { _, _ ->
+                val key = apiKeyField.text.toString().trim()
+                val id = voiceIdField.text.toString().trim()
+                if (key.isBlank() || id.isBlank()) {
+                    statusTextOrToast("Both the AssemblyAI API key and cloned voice ID are required.")
+                } else {
+                    UltronSettings.save(this, "assemblyai_api_key", key)
+                    UltronSettings.save(this, "assemblyai_voice_id", id)
+                    UltronVoice.speak(this, "ULTRON voice system activated. This reply is being generated with your AssemblyAI cloned voice.")
+                    showFeature("CLONED VOICE ACTIVATED", "AssemblyAI is now selected for ULTRON speech. If the API key or voice ID is invalid, ULTRON will show an error instead of silently switching to the Android voice.")
+                }
+            }.setNegativeButton("CANCEL", null).show()
     }
 
     private fun showPhoneControls() {
