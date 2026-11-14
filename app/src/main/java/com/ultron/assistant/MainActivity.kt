@@ -368,9 +368,10 @@ class MainActivity : Activity() {
         chatBusy = true
         chatInput.setText("")
         chatLog.text = "YOU: $question\n\nULTRON: Thinking…"
+        val priorConversation = UltronConversation.transcript(this)
         UltronConversation.addTurn(this, "User", question)
         Thread {
-            val answer = AIController.ask(key, question, UltronMemory.recall(this), UltronConversation.transcript(this))
+            val answer = AIController.ask(key, question, UltronMemory.recall(this), priorConversation)
             UltronConversation.addTurn(this, "ULTRON", answer)
             runOnUiThread {
                 chatLog.text = "YOU: $question\n\nULTRON: $answer"
