@@ -231,7 +231,7 @@ class MainActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, results)
         if (requestCode == 77) refreshAgenda()
         if (requestCode == 78) {
-            if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) usePhoneLocation()
+            if (results.any { it == PackageManager.PERMISSION_GRANTED }) usePhoneLocation()
             else weatherText.text = "Location permission denied. Allow it in Android Settings > Apps > ULTRON > Permissions."
         }
     }
@@ -641,27 +641,75 @@ class MainActivity : Activity() {
     private class CoreView(context: Context) : View(context) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private var phase = 0f
+
+        init {
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+            contentDescription = "Animated blue holographic ULTRON AI core"
+        }
+
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
-            val cx = width / 2f; val cy = height / 2f; val radius = max(1f, width.coerceAtMost(height) * .36f)
-            paint.style = Paint.Style.STROKE; paint.strokeWidth = 1.5f
-            paint.color = Color.rgb(25, 180, 245)
-            canvas.drawCircle(cx, cy, radius, paint)
-            paint.strokeWidth = 2.5f
-            canvas.drawArc(cx-radius-7, cy-radius-7, cx+radius+7, cy+radius+7, phase, 235f, false, paint)
-            paint.color = Color.rgb(40, 220, 255); paint.style = Paint.Style.FILL
-            canvas.drawCircle(cx, cy, radius * .62f, paint.apply { alpha = 28 })
-            paint.style = Paint.Style.STROKE; paint.strokeWidth = 1f
-            for (i in 0..5) {
-                val a = Math.toRadians((phase + i * 60).toDouble())
-                val x = cx + kotlin.math.cos(a).toFloat() * radius * .83f
-                val y = cy + kotlin.math.sin(a).toFloat() * radius * .83f
-                canvas.drawCircle(x, y, 2.8f, paint)
+            val cx = width / 2f
+            val cy = height / 2f
+            val radius = max(1f, width.coerceAtMost(height) * .31f)
+            val pulse = 0.94f + 0.06f * kotlin.math.sin(Math.toRadians(phase.toDouble())).toFloat()
+
+            // Soft blue aura and bright glass-like center.
+            paint.style = Paint.Style.FILL
+            paint.shader = android.graphics.RadialGradient(
+                cx, cy, radius * 1.75f,
+                intArrayOf(Color.argb(105, 0, 185, 255), Color.argb(35, 0, 105, 255), Color.TRANSPARENT),
+                floatArrayOf(0f, .55f, 1f), android.graphics.Shader.TileMode.CLAMP
+            )
+            canvas.drawCircle(cx, cy, radius * 1.75f, paint)
+            paint.shader = null
+
+            paint.color = Color.argb(90, 0, 185, 255)
+            paint.maskFilter = android.graphics.BlurMaskFilter(radius * .24f, android.graphics.BlurMaskFilter.Blur.NORMAL)
+            canvas.drawCircle(cx, cy, radius * .82f * pulse, paint)
+            paint.maskFilter = null
+
+            // Layered rotating orbital rings.
+            paint.style = Paint.Style.STROKE
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.color = Color.argb(220, 75, 220, 255)
+            paint.strokeWidth = 1.5f
+            canvas.drawCircle(cx, cy, radius * pulse, paint)
+            paint.color = Color.argb(150, 25, 150, 255)
+            paint.strokeWidth = 2.2f
+            canvas.save()
+            canvas.rotate(phase, cx, cy)
+            canvas.drawOval(cx - radius * 1.25f, cy - radius * .48f, cx + radius * 1.25f, cy + radius * .48f, paint)
+            canvas.restore()
+            canvas.save()
+            canvas.rotate(-phase * .72f, cx, cy)
+            paint.color = Color.argb(190, 65, 205, 255)
+            paint.strokeWidth = 1.4f
+            canvas.drawOval(cx - radius * .5f, cy - radius * 1.3f, cx + radius * .5f, cy + radius * 1.3f, paint)
+            canvas.restore()
+
+            // Bright inner plasma sphere.
+            paint.style = Paint.Style.FILL
+            paint.shader = android.graphics.RadialGradient(
+                cx - radius * .2f, cy - radius * .22f, radius * 1.05f,
+                intArrayOf(Color.WHITE, Color.rgb(125, 235, 255), Color.rgb(0, 135, 255), Color.argb(210, 0, 35, 125)),
+                floatArrayOf(0f, .16f, .62f, 1f), android.graphics.Shader.TileMode.CLAMP
+            )
+            canvas.drawCircle(cx, cy, radius * .72f * pulse, paint)
+            paint.shader = null
+
+            // Small orbiting energy points.
+            paint.color = Color.WHITE
+            for (i in 0..7) {
+                val a = Math.toRadians((phase * 1.4f + i * 45).toDouble())
+                val orbit = radius * (1.08f + if (i % 2 == 0) .12f else 0f)
+                val x = cx + kotlin.math.cos(a).toFloat() * orbit
+                val y = cy + kotlin.math.sin(a).toFloat() * orbit
+                canvas.drawCircle(x, y, if (i % 2 == 0) 2.3f else 1.4f, paint)
             }
-            paint.style = Paint.Style.FILL; paint.color = Color.WHITE; paint.textAlign = Paint.Align.CENTER; paint.textSize = 11f
-            canvas.drawText("AI CORE", cx, cy + 4f, paint)
-            phase = (phase + 2.2f) % 360f
-            postInvalidateDelayed(50)
+
+            phase = (phase + 2.0f) % 360f
+            postInvalidateDelayed(40)
         }
     }
 }
