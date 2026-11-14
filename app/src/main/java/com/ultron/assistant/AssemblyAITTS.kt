@@ -38,6 +38,8 @@ object AssemblyAITTS {
                     .put("voice", voiceId)
                     .put("input", text.take(5000))
                     .put("response_format", "mp3")
+                    // Cloned voices require periodic biometric-consent renewal.
+                    .put("extend_biometric_consent", true)
                     
                 connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
                 val code = connection.responseCode
@@ -52,6 +54,10 @@ object AssemblyAITTS {
                     try {
                         player?.let { old -> try { old.stop() } catch (_: Exception) {}; old.release() }
                         player = MediaPlayer().apply {
+                            setAudioAttributes(android.media.AudioAttributes.Builder()
+                                .setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)
+                                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                                .build())
                             setDataSource(file.absolutePath)
                             setOnPreparedListener { it.start() }
                             setOnCompletionListener { mp -> mp.release(); if (player === mp) player = null }
