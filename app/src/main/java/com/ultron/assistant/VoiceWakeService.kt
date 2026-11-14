@@ -288,7 +288,7 @@ class VoiceWakeService : Service() {
         if (spoken.isBlank()) return
 
         // Read the phone's real local clock; never ask the AI to guess the time.
-        if (spoken.matches(Regex(".*\\\\b(time is it|current time|tell me the time|what time|the time)\\\\b.*"))) {
+        if (spoken.matches(Regex(".*\\b(time is it|current time|tell me the time|what time|the time)\\b.*"))) {
             val now = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
                 .format(java.util.Date())
             val answer = "It's $now."
