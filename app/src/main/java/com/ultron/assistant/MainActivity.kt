@@ -392,18 +392,17 @@ class MainActivity : Activity() {
     }
 
     private fun showSettings() {
-        val options = arrayOf("AI / Groq API key", "Fish Audio voice", "Import voice sample", "WhatsApp notifications", "Calendar permission", "Weather location", "Saved memories", "App permissions", "About / feature status")
+        val options = arrayOf("AI / Groq API key", "Import voice sample", "WhatsApp notifications", "Calendar permission", "Weather location", "Saved memories", "App permissions", "About / feature status")
         AlertDialog.Builder(this).setTitle("ULTRON SETTINGS").setItems(options) { _, which ->
             when (which) {
                 0 -> credentialDialog("Groq API key", "openai_api_key")
-                1 -> fishDialog()
-                2 -> chooseVoiceSample()
-                3 -> startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                4 -> requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), 77)
-                5 -> chooseWeatherCity()
-                6 -> showMemories()
-                7 -> openPermissionSettings()
-                8 -> showFeature("ULTRON feature status", "Included now: AI chat, saved memory, conversation history, live clock, weather, calendar, notifications, media controls, app launcher, notes, reminders section, routines section, web section, phone controls section, voice settings, and voice-sample import. Some advanced integrations still need implementation and device testing.")
+                1 -> chooseVoiceSample()
+                2 -> startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                3 -> requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), 77)
+                4 -> chooseWeatherCity()
+                5 -> showMemories()
+                6 -> openPermissionSettings()
+                7 -> showFeature("ULTRON feature status", "Included now: AI chat, saved memory, conversation history, live clock, weather, calendar, notifications, media controls, app launcher, notes, reminders section, routines section, web section, phone controls section, and voice-sample import. Some advanced integrations still need implementation and device testing.")
             }
         }.show()
     }
@@ -414,18 +413,6 @@ class MainActivity : Activity() {
             .setPositiveButton("SAVE") { _, _ ->
                 val value = field.text.toString().trim()
                 if (value.isNotBlank()) UltronSettings.save(this, key, value)
-            }.setNegativeButton("CANCEL", null).show()
-    }
-
-    private fun fishDialog() {
-        val box = column()
-        val api = EditText(this).apply { hint = "Fish Audio API key"; setTextColor(Color.WHITE); inputType = 129 }
-        val voice = EditText(this).apply { hint = "Voice model ID"; setTextColor(Color.WHITE) }
-        box.addView(api); box.addView(voice)
-        AlertDialog.Builder(this).setTitle("FISH AUDIO").setView(box)
-            .setPositiveButton("SAVE") { _, _ ->
-                if (api.text.isNotBlank()) UltronSettings.save(this, "fish_api_key", api.text.toString().trim())
-                if (voice.text.isNotBlank()) UltronSettings.save(this, "fish_voice_id", voice.text.toString().trim())
             }.setNegativeButton("CANCEL", null).show()
     }
 
