@@ -24,6 +24,7 @@ class VoiceWakeService : Service() {
     }
 
     private var recognizer: SpeechRecognizer? = null
+    private var recognitionGeneration = 0
     private var active = false
     private var waitingForCommand = false
     private var wakeLock: PowerManager.WakeLock? = null
@@ -190,15 +191,25 @@ class VoiceWakeService : Service() {
         }
 
         try {
-            recognizer?.destroy()
-            recognizer = SpeechRecognizer.createSpeechRecognizer(
-                applicationContext
-            )
+            // Invalidate callbacks from the previous recognizer before replacing it.
+            recognitionGeneration += 1
+            val generation = recognitionGeneration
+            val previous = recognizer
+            recognizer = null
+            try { previous?.cancel() } catch (_: RuntimeException) { }
+            try { previous?.destroy() } catch (_: RuntimeException) { }
 
-            recognizer?.setRecognitionListener(
+            val currentRecognizer = SpeechRecognizer.createSpeechRecognizer(applicationContext)
+            recognizer = currentRecognizer
+
+            currentRecognizer.setRecognitionListener(
                 object : RecognitionListener {
+                    private fun isCurrent(): Boolean =
+                        active && generation == recognitionGeneration &&
+                            recognizer === currentRecognizer
 
                     override fun onReadyForSpeech(params: Bundle?) {
+                        if (!isCurrent()) return
                         UltronSettings.save(this@VoiceWakeService, "voice_status", "LISTENING FOR ULTRON")
                         updateNotification(
                             if (waitingForCommand) {
@@ -210,24 +221,27 @@ class VoiceWakeService : Service() {
                     }
 
                     override fun onBeginningOfSpeech() {
+                        if (!isCurrent()) return
                         UltronSettings.save(this@VoiceWakeService, "voice_status", "HEARING YOU")
                         updateNotification("Hearing you…")
                     }
                     override fun onRmsChanged(rmsdB: Float) {}
                     override fun onBufferReceived(buffer: ByteArray?) {}
                     override fun onEndOfSpeech() {
+                        if (!isCurrent()) return
                         UltronSettings.save(this@VoiceWakeService, "voice_status", "PROCESSING SPEECH")
                         updateNotification("Processing speech…")
                     }
 
                     override fun onError(error: Int) {
+                        if (!isCurrent()) return
                         UltronSettings.save(this@VoiceWakeService, "voice_status", "RECONNECTING — SPEECH ERROR " + error)
                         updateNotification("Speech error " + error + " — reconnecting")
                         restartListening(if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 1800 else 900)
                     }
 
                     override fun onResults(results: Bundle?) {
-                        if (!active) return
+                        if (!isCurrent()) return
 
                         val spokenOptions = results
                             ?.getStringArrayList(
@@ -251,15 +265,16 @@ class VoiceWakeService : Service() {
                 }
             )
 
-            listen()
+            listen(currentRecognizer)
 
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            UltronSettings.save(this, "voice_status", "RECONNECTING — " + e.javaClass.simpleName)
             restartListening(2000)
         }
     }
 
-    private fun listen() {
-        if (!active) return
+    private fun listen(target: SpeechRecognizer) {
+        if (!active || recognizer !== target) return
 
         val intent = Intent(
             RecognizerIntent.ACTION_RECOGNIZE_SPEECH
@@ -275,7 +290,7 @@ class VoiceWakeService : Service() {
 
         try {
             UltronSettings.save(this, "voice_status", "STARTING LISTENER")
-            recognizer?.startListening(intent)
+            target.startListening(intent)
         } catch (e: Exception) {
             UltronSettings.save(this, "voice_status", "RECONNECTING — " + e.javaClass.simpleName)
             restartListening(1500)
@@ -492,6 +507,7 @@ class VoiceWakeService : Service() {
 
     override fun onDestroy() {
         active = false
+        recognitionGeneration += 1
         restartHandler.removeCallbacksAndMessages(null)
         try { recognizer?.cancel() } catch (_: RuntimeException) { }
         try { recognizer?.destroy() } catch (_: RuntimeException) { }
