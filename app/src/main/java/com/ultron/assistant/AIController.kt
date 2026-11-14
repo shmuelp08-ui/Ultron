@@ -36,7 +36,6 @@ object AIController {
                     append("Current message: ")
                     append(message)
                 })
-                .put("store", false)
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
