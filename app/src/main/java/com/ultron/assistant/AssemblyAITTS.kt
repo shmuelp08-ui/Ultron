@@ -21,6 +21,10 @@ object AssemblyAITTS {
 
     fun speak(context: Context, text: String, apiKey: String, voiceId: String) {
         if (text.isBlank()) return
+        if (apiKey.isBlank() || voiceId.isBlank()) {
+            main.post { Toast.makeText(context, "Add your AssemblyAI API key and cloned Voice ID in Settings.", Toast.LENGTH_LONG).show() }
+            return
+        }
         Thread {
             var connection: HttpURLConnection? = null
             try {
@@ -35,7 +39,7 @@ object AssemblyAITTS {
                 }
                 val body = JSONObject()
                     .put("model", "assemblyai-tts-en")
-                    .put("voice", voiceId)
+                    .put("voice", JSONObject().put("id", voiceId))
                     .put("input", text.take(5000))
                     .put("response_format", "mp3")
                     // Cloned voices require periodic biometric-consent renewal.
@@ -45,7 +49,9 @@ object AssemblyAITTS {
                 val code = connection.responseCode
                 if (code !in 200..299) {
                     val error = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                    throw Exception("AssemblyAI TTS failed ($code): ${error.take(300)}")
+                    val requestId = connection.getHeaderField("x-request-id").orEmpty()
+                    val requestSuffix = if (requestId.isNotBlank()) " [request " + requestId + "]" else ""
+                    throw Exception("AssemblyAI TTS failed ($code): " + error.take(1200) + requestSuffix)
                 }
                 val file = File(context.cacheDir, "ultron_assemblyai_reply.mp3")
                 connection.inputStream.use { input -> file.outputStream().use { input.copyTo(it) } }
