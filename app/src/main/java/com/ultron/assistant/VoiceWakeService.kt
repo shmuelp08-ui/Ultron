@@ -580,8 +580,14 @@ class VoiceWakeService : Service() {
     private fun handleWhatsAppCommand(command: String): Boolean {
         val contactAndMessage = listOf(
             Regex("^(?:send|text|message) (.+?) to (.+?) on whatsapp$"),
-            Regex("^whatsapp message (.+?) to (.+)$")
+            Regex("^whatsapp message (.+?) to (.+)$"),
+            Regex("^send whatsapp message to (.+?) saying (.+)$")
         )
+        val sendToSaying = Regex("^send whatsapp message to (.+?) saying (.+)$").find(command)
+        if (sendToSaying != null) {
+            return openWhatsAppContact(sendToSaying.groupValues[1].trim(), sendToSaying.groupValues[2].trim())
+        }
+
         for (pattern in contactAndMessage) {
             val match = pattern.find(command) ?: continue
             val message = match.groupValues[1].trim()
@@ -692,9 +698,11 @@ class VoiceWakeService : Service() {
             speakResponse(response)
             return true
         }
-        if (!keyguard.isKeyguardLocked && resolvedNumber != null && openWhatsAppDeepLink(contact, message)) {
-            val response = if (message.isNullOrBlank()) "Opening your WhatsApp chat with $contact."
-                else "Opening $contact's WhatsApp chat with your message ready. Review it and tap Send."
+        // Deep links only open chats. For an explicit send request, route
+        // through the accessibility flow so ULTRON can fill and tap Send.
+        if (!keyguard.isKeyguardLocked && resolvedNumber != null &&
+            message.isNullOrBlank() && openWhatsAppDeepLink(contact, null)) {
+            val response = "Opening your WhatsApp chat with $contact."
             updateNotification(response)
             speakResponse(response)
             return true
@@ -734,7 +742,7 @@ class VoiceWakeService : Service() {
         val started = UltronAccessibilityService.openWhatsAppConversation(contact, message)
         val response = if (started) {
             if (message.isNullOrBlank()) "Finding $contact in WhatsApp."
-            else "Opening $contact and preparing your message. Review it and tap Send."
+            else "Sending your WhatsApp message to $contact."
         } else "I couldn't start WhatsApp contact navigation. Make sure WhatsApp is installed and ULTRON Phone Control is enabled."
         updateNotification(response)
         speakResponse(response)
