@@ -28,7 +28,8 @@ class VoiceWakeService : Service() {
     private var active = false
     private var waitingForCommand = false
     private var wakeLock: PowerManager.WakeLock? = null
-    private val restartHandler = android.os.Handler(mainLooper)
+    // Service Context is not attached during construction; initialize Handler in onCreate.
+    private lateinit var restartHandler: android.os.Handler
     private val restartTask = Runnable { if (active) startRecognition() }
 
     private val apps = mapOf(
@@ -42,6 +43,7 @@ class VoiceWakeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        restartHandler = android.os.Handler(android.os.Looper.getMainLooper())
         createNotificationChannel()
     }
 
