@@ -77,6 +77,7 @@ class MainActivity : Activity() {
         window.statusBarColor = bg
         window.navigationBarColor = bg
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        UltronSettings.save(this, "voice_enabled", "false")
         buildDashboard()
         requestRuntimePermissions()
         refreshWeather()
@@ -211,13 +212,7 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, results: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, results)
-        if (requestCode == 77) {
-            refreshAgenda()
-            if (UltronSettings.get(this, "voice_enabled") == "true" &&
-                checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                startVoiceIfEnabled()
-            }
-        }
+        if (requestCode == 77) refreshAgenda()
     }
 
     private fun startVoiceIfEnabled() {
