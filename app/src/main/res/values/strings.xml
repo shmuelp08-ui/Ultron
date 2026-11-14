@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ultron_accessibility_description">Allows ULTRON to perform user-approved phone navigation and interact with supported on-screen controls.</string>
+</resources>
