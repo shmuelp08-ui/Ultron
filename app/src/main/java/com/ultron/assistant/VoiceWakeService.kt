@@ -404,17 +404,8 @@ class VoiceWakeService : Service() {
             return
         }
 
-        // WhatsApp: open the user-supplied chat, or prepare a dictated message.
-        // WhatsApp displays the draft; the user must review and tap Send.
-        val whatsappMessage = extractWhatsAppMessage(spoken)
-        if (whatsappMessage != null) {
-            openWhatsAppChat(whatsappMessage)
-            return
-        }
-        if (spoken.contains("whatsapp") || spoken.contains("what s app")) {
-            openWhatsAppChat(null)
-            return
-        }
+        // WhatsApp contact navigation is driven through the user-enabled Accessibility bridge.
+        if (handleWhatsAppCommand(spoken)) return
 
         // Phone-wide navigation is available only after the user enables ULTRON Accessibility.
         val globalAction = when {
@@ -543,6 +534,68 @@ class VoiceWakeService : Service() {
                 }
             }
         }.start()
+    }
+
+    private fun handleWhatsAppCommand(command: String): Boolean {
+        val contactAndMessage = listOf(
+            Regex("^(?:send|text|message) (.+?) to (.+?) on whatsapp$"),
+            Regex("^whatsapp message (.+?) to (.+)$")
+        )
+        for (pattern in contactAndMessage) {
+            val match = pattern.find(command) ?: continue
+            val message = match.groupValues[1].trim()
+            val contact = match.groupValues[2].trim()
+            return openWhatsAppContact(contact, message)
+        }
+
+        val contactWithMessage = Regex("^message (.+?) on whatsapp saying (.+)$").find(command)
+        if (contactWithMessage != null) {
+            return openWhatsAppContact(contactWithMessage.groupValues[1].trim(), contactWithMessage.groupValues[2].trim())
+        }
+
+        val contactPatterns = listOf(
+            Regex("^(?:open|go to|show me) (?:my )?(?:whatsapp )?(?:chat|conversation) with (.+)$"),
+            Regex("^(?:open|go to) whatsapp (?:chat|conversation) with (.+)$"),
+            Regex("^(?:open|go to) (.+?) on whatsapp$")
+        )
+        for (pattern in contactPatterns) {
+            val match = pattern.find(command) ?: continue
+            val contact = match.groupValues[1].trim()
+            if (contact.isNotBlank()) return openWhatsAppContact(contact, null)
+        }
+
+        if (command == "whatsapp" || command == "open whatsapp" || command == "go to whatsapp" ||
+            command == "open my whatsapp" || command == "launch whatsapp") {
+            val intent = packageManager.getLaunchIntentForPackage("com.whatsapp")
+                ?: packageManager.getLaunchIntentForPackage("com.whatsapp.w4b")
+            if (intent == null) {
+                speakResponse("WhatsApp isn't installed.")
+                updateNotification("WhatsApp isn't installed")
+            } else openActivity(intent)
+            return true
+        }
+        return false
+    }
+
+    private fun openWhatsAppContact(contact: String, message: String?): Boolean {
+        if (contact.isBlank()) return false
+        if (!UltronAccessibilityService.isEnabled()) {
+            val launch = packageManager.getLaunchIntentForPackage("com.whatsapp")
+                ?: packageManager.getLaunchIntentForPackage("com.whatsapp.w4b")
+            if (launch != null) openActivity(launch)
+            val response = "I opened WhatsApp, but contact navigation needs ULTRON Phone Control enabled in Android Accessibility settings."
+            updateNotification(response)
+            speakResponse(response)
+            return true
+        }
+        val started = UltronAccessibilityService.openWhatsAppConversation(contact, message)
+        val response = if (started) {
+            if (message.isNullOrBlank()) "Finding $contact in WhatsApp."
+            else "Opening $contact and preparing your message. Review it and tap Send."
+        } else "I couldn't start WhatsApp contact navigation. Make sure WhatsApp is installed and ULTRON Phone Control is enabled."
+        updateNotification(response)
+        speakResponse(response)
+        return true
     }
 
     private fun extractWhatsAppMessage(command: String): String? {
