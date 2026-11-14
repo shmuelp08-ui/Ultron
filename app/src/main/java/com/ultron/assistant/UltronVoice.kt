@@ -5,7 +5,8 @@ import android.speech.tts.TextToSpeech
 import java.util.Locale
 
 /**
- * Uses Android's built-in text-to-speech engine. No external voice API or key required.
+ * ULTRON uses the configured AssemblyAI cloned voice for all generated replies.
+ * Android TTS is used only until the user configures an AssemblyAI voice.
  */
 object UltronVoice {
     private var engine: TextToSpeech? = null
@@ -15,12 +16,17 @@ object UltronVoice {
     @Synchronized
     fun speak(context: Context, text: String) {
         if (text.isBlank()) return
-        val fishKey = UltronSettings.get(context, "fish_api_key")
-        val fishVoiceId = UltronSettings.get(context, "fish_voice_id")
-        if (!fishKey.isNullOrBlank() && !fishVoiceId.isNullOrBlank() && UltronSettings.get(context, "voice_mode") == "fish") {
-            FishVoice.speak(context, text, fishKey, fishVoiceId)
+        val key = UltronSettings.get(context, "assemblyai_api_key")
+        val voiceId = UltronSettings.get(context, "assemblyai_voice_id")
+        if (!key.isNullOrBlank() && !voiceId.isNullOrBlank()) {
+            AssemblyAITTS.speak(context, text, key, voiceId)
             return
         }
+        speakAndroid(context, text)
+    }
+
+    @Synchronized
+    private fun speakAndroid(context: Context, text: String) {
         val tts = engine
         if (tts == null) {
             pending.addLast(text)
@@ -46,26 +52,13 @@ object UltronVoice {
 
     @Synchronized
     fun speakSystemFallback(context: Context, text: String) {
-        val tts = engine
-        if (tts != null && ready) {
-            tts.speak(text, TextToSpeech.QUEUE_ADD, null, "ultron-fallback-" + System.nanoTime())
-        } else if (tts == null) {
-            engine = TextToSpeech(context.applicationContext) { status ->
-                synchronized(this) {
-                    val current = engine ?: return@synchronized
-                    if (status == TextToSpeech.SUCCESS) {
-                        val language = current.setLanguage(Locale.US)
-                        ready = language != TextToSpeech.LANG_MISSING_DATA && language != TextToSpeech.LANG_NOT_SUPPORTED
-                        if (ready) current.speak(text, TextToSpeech.QUEUE_FLUSH, null, "ultron-system-fallback")
-                    }
-                }
-            }
-        }
+        speakAndroid(context, text)
     }
 
     @Synchronized
     fun stop() {
         engine?.stop()
+        AssemblyAITTS.stop()
     }
 
     @Synchronized
