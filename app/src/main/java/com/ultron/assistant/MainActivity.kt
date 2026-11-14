@@ -541,7 +541,7 @@ class MainActivity : Activity() {
     }
 
     private fun showSettings() {
-        val options = arrayOf("AI / Groq API key", "AssemblyAI voice setup", "WhatsApp notifications", "Calendar permission", "Weather location", "Saved memories", "App permissions", "About / feature status")
+        val options = arrayOf("AI / Groq API key", "AssemblyAI voice setup", "WhatsApp notifications", "Calendar permission", "Weather location", "Saved memories", "App permissions", "Accessibility / phone control", "About / feature status")
         AlertDialog.Builder(this).setTitle("ULTRON SETTINGS").setItems(options) { _, which ->
             when (which) {
                 0 -> credentialDialog("Groq API key", "openai_api_key")
@@ -551,7 +551,8 @@ class MainActivity : Activity() {
                 4 -> usePhoneLocation()
                 5 -> showMemories()
                 6 -> openPermissionSettings()
-                7 -> showFeature("ULTRON feature status", "Included now: AI chat, saved memory, conversation history, live clock, weather, calendar, notifications, media controls, app launcher, notes, reminders section, routines section, web section, phone controls section, and voice-sample import. Some advanced integrations still need implementation and device testing.")
+                7 -> openAccessibilitySettings()
+                8 -> showFeature("ULTRON feature status", "Included now: AI chat, saved memory, conversation history, live clock, weather, calendar, notifications, media controls, app launcher, notes, reminders section, routines section, web section, phone controls section, and voice-sample import. Some advanced integrations still need implementation and device testing.")
             }
         }.show()
     }
@@ -644,6 +645,15 @@ class MainActivity : Activity() {
     private fun openPermissionSettings() {
         try { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
         catch (_: Exception) { showFeature("Permissions", "Open Android Settings > Apps > ULTRON > Permissions.") }
+    }
+
+    private fun openAccessibilitySettings() {
+        showFeature(
+            "ENABLE ULTRON PHONE CONTROL",
+            "Find ULTRON Phone Control and switch it on. Review Android's accessibility warning and approve only if you want ULTRON to use navigation controls. You can turn it off any time in Accessibility settings."
+        )
+        try { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+        catch (_: Exception) { statusTextOrToast("Open Android Settings > Accessibility > Installed apps > ULTRON Phone Control.") }
     }
 
     private fun showMemories() {
