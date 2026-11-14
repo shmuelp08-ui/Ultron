@@ -177,6 +177,20 @@ class MainActivity : Activity() {
         music.addView(mediaRow)
         root.addView(music)
 
+        val features = panelCard()
+        features.addView(sectionTitle("⬡  ULTRON SYSTEMS"))
+        val featureRows = listOf(
+            listOf("⏰ REMINDERS" to { showFeature("Reminders", "Reminder scheduling is being wired up. This section is included for your first full app test.") }, "▤ NOTES" to { showNotes() }, "↻ ROUTINES" to { showFeature("Routines", "Create routines such as Good morning, Study mode, and Night mode. Routine actions are being wired up.") }),
+            listOf("◉ VOICE CLONE" to { chooseVoiceSample() }, "⌕ WEB" to { showFeature("Web access", "ULTRON's web search interface is included. Search-provider integration is still pending.") }, "▣ PHONE CONTROL" to { showPhoneControls() }),
+            listOf("◈ MEMORY" to { showMemories() }, "▦ CALENDAR" to { startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_CALENDAR)) }, "⚙ PERMISSIONS" to { openPermissionSettings() })
+        )
+        featureRows.forEach { items ->
+            val featureRow = row()
+            items.forEach { (label, action) -> featureRow.addView(actionButton(label, action), weightParams(1f)) }
+            features.addView(featureRow)
+        }
+        root.addView(features)
+
         val chat = panelCard()
         chat.addView(sectionTitle("◉  TALK TO ULTRON"))
         chatLog = text("Your assistant is ready. Configure your AI key in SETTINGS to enable online intelligence.", 13f, Color.WHITE)
@@ -378,15 +392,18 @@ class MainActivity : Activity() {
     }
 
     private fun showSettings() {
-        val options = arrayOf("AI / Groq API key", "Fish Audio voice", "WhatsApp notifications", "Calendar permission", "Weather location", "Saved memories")
+        val options = arrayOf("AI / Groq API key", "Fish Audio voice", "Import voice sample", "WhatsApp notifications", "Calendar permission", "Weather location", "Saved memories", "App permissions", "About / feature status")
         AlertDialog.Builder(this).setTitle("ULTRON SETTINGS").setItems(options) { _, which ->
             when (which) {
                 0 -> credentialDialog("Groq API key", "openai_api_key")
                 1 -> fishDialog()
-                2 -> startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                3 -> requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), 77)
-                4 -> chooseWeatherCity()
-                5 -> showMemories()
+                2 -> chooseVoiceSample()
+                3 -> startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                4 -> requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), 77)
+                5 -> chooseWeatherCity()
+                6 -> showMemories()
+                7 -> openPermissionSettings()
+                8 -> showFeature("ULTRON feature status", "Included now: AI chat, saved memory, conversation history, live clock, weather, calendar, notifications, media controls, app launcher, notes, reminders section, routines section, web section, phone controls section, voice settings, and voice-sample import. Some advanced integrations still need implementation and device testing.")
             }
         }.show()
     }
@@ -410,6 +427,69 @@ class MainActivity : Activity() {
                 if (api.text.isNotBlank()) UltronSettings.save(this, "fish_api_key", api.text.toString().trim())
                 if (voice.text.isNotBlank()) UltronSettings.save(this, "fish_voice_id", voice.text.toString().trim())
             }.setNegativeButton("CANCEL", null).show()
+    }
+
+    private fun showFeature(title: String, message: String) {
+        AlertDialog.Builder(this).setTitle(title).setMessage(message).setPositiveButton("GOT IT", null).show()
+    }
+
+    private fun showNotes() {
+        val field = EditText(this).apply {
+            hint = "Write a note for ULTRON…"
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            minLines = 3
+            setText(UltronSettings.get(this@MainActivity, "quick_note") ?: "")
+        }
+        AlertDialog.Builder(this).setTitle("ULTRON NOTES").setView(field)
+            .setPositiveButton("SAVE") { _, _ ->
+                UltronSettings.save(this, "quick_note", field.text.toString())
+                statusTextOrToast("Note saved")
+            }.setNeutralButton("VIEW") { _, _ ->
+                showFeature("Saved note", UltronSettings.get(this, "quick_note")?.ifBlank { "No note saved." } ?: "No note saved.")
+            }.setNegativeButton("CANCEL", null).show()
+    }
+
+    private fun chooseVoiceSample() {
+        try {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "audio/*"
+            }
+            startActivityForResult(intent, 409)
+        } catch (_: Exception) {
+            showFeature("Voice sample", "Your phone could not open the audio picker.")
+        }
+    }
+
+    @Deprecated("Deprecated by Android, retained for broad device compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 409 && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            UltronSettings.save(this, "voice_sample_uri", uri.toString())
+            showFeature("Voice sample imported", "ULTRON saved the selected audio file reference. Actual local voice-model training and cloning still need to be integrated.")
+        }
+    }
+
+    private fun showPhoneControls() {
+        val options = arrayOf("Open Android settings", "Open app settings", "Open dialer", "Open Bluetooth settings", "Open Wi-Fi settings")
+        AlertDialog.Builder(this).setTitle("PHONE CONTROLS").setItems(options) { _, which ->
+            val intent = when (which) {
+                0 -> Intent(Settings.ACTION_SETTINGS)
+                1 -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+                2 -> Intent(Intent.ACTION_DIAL)
+                3 -> Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+                else -> Intent(Settings.ACTION_WIFI_SETTINGS)
+            }
+            try { startActivity(intent) } catch (_: Exception) { statusTextOrToast("That control is unavailable") }
+        }.show()
+    }
+
+    private fun openPermissionSettings() {
+        try { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
+        catch (_: Exception) { showFeature("Permissions", "Open Android Settings > Apps > ULTRON > Permissions.") }
     }
 
     private fun showMemories() {
