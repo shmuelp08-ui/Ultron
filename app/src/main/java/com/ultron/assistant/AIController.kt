@@ -29,9 +29,9 @@ object AIController {
                 .put("instructions", instructions)
                 .put("input", buildString {
                     if (conversation.isNotBlank()) {
-                        append("Recent conversation:\\n")
+                        append("Recent conversation:\n")
                         append(conversation)
-                        append("\\n\\n")
+                        append("\n\n")
                     }
                     append("Current message: ")
                     append(message)
