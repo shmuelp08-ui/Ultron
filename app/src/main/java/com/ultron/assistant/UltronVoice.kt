@@ -47,7 +47,20 @@ object UltronVoice {
     @Synchronized
     fun speakSystemFallback(context: Context, text: String) {
         val tts = engine
-        if (tts != null && ready) tts.speak(text, TextToSpeech.QUEUE_ADD, null, "ultron-fallback-" + System.nanoTime()) else speak(context, text)
+        if (tts != null && ready) {
+            tts.speak(text, TextToSpeech.QUEUE_ADD, null, "ultron-fallback-" + System.nanoTime())
+        } else if (tts == null) {
+            engine = TextToSpeech(context.applicationContext) { status ->
+                synchronized(this) {
+                    val current = engine ?: return@synchronized
+                    if (status == TextToSpeech.SUCCESS) {
+                        val language = current.setLanguage(Locale.US)
+                        ready = language != TextToSpeech.LANG_MISSING_DATA && language != TextToSpeech.LANG_NOT_SUPPORTED
+                        if (ready) current.speak(text, TextToSpeech.QUEUE_FLUSH, null, "ultron-system-fallback")
+                    }
+                }
+            }
+        }
     }
 
     @Synchronized
