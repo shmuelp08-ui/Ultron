@@ -641,7 +641,34 @@ class VoiceWakeService : Service() {
     private fun openWhatsAppContact(contact: String, message: String?): Boolean {
         if (contact.isBlank()) return false
         val keyguard = getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
-        if (!keyguard.isKeyguardLocked && openWhatsAppDeepLink(contact, message)) {
+        val resolvedNumber = resolveWhatsAppNumber(contact)
+        if (keyguard.isKeyguardLocked && resolvedNumber != null) {
+            val digits = resolvedNumber.trimStart('0')
+            val query = message?.takeIf { it.isNotBlank() }?.let { "?text=" + Uri.encode(it) }.orEmpty()
+            val chatIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/\$digits\$query")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (packageManager.getLaunchIntentForPackage("com.whatsapp") != null) setPackage("com.whatsapp")
+                else if (packageManager.getLaunchIntentForPackage("com.whatsapp.w4b") != null) setPackage("com.whatsapp.w4b")
+            }
+            val pending = PendingIntent.getActivity(
+                this, 7402, chatIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val notice = Notification.Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Unlock to open WhatsApp chat")
+                .setContentText("Tap after unlocking to open ${contact}'s conversation directly.")
+                .setContentIntent(pending)
+                .setAutoCancel(true)
+                .setVisibility(Notification.VISIBILITY_PRIVATE)
+                .build()
+            getSystemService(NotificationManager::class.java).notify(741, notice)
+            val response = "Your phone is locked. Tap the ULTRON notification after unlocking to open $contact's chat."
+            updateNotification(response)
+            speakResponse(response)
+            return true
+        }
+        if (!keyguard.isKeyguardLocked && resolvedNumber != null && openWhatsAppDeepLink(contact, message)) {
             val response = if (message.isNullOrBlank()) "Opening your WhatsApp chat with $contact."
                 else "Opening $contact's WhatsApp chat with your message ready. Review it and tap Send."
             updateNotification(response)
