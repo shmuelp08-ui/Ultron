@@ -397,8 +397,8 @@ class VoiceWakeService : Service() {
             return
         }
 
-        UltronConversation.addTurn(this, "User", command)
         val recentConversation = UltronConversation.transcript(this)
+        UltronConversation.addTurn(this, "User", command)
         updateNotification("ULTRON is thinking...")
         Thread {
             val answer = AIController.ask(
