@@ -240,10 +240,26 @@ class UltronAccessibilityService : AccessibilityService() {
                         putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, waMessage)
                     }
                     if (composer.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
-                        // Intentionally do not press Send. User reviews and sends.
-                        clearWhatsAppFlow()
+                        // The user explicitly dictated a send command. Send only
+                        // after the intended contact chat is open and text is filled.
+                        waStage = 5
+                        waRetries = 0
+                        retryWhatsApp(650)
                     } else retryWhatsApp()
                 } else retryWhatsApp()
+            }
+            5 -> {
+                val sendButton = findNode(root) { node ->
+                    val text = node.text?.toString()?.trim()?.lowercase().orEmpty()
+                    val description = node.contentDescription?.toString()?.trim()?.lowercase().orEmpty()
+                    val id = node.viewIdResourceName?.lowercase().orEmpty()
+                    node.isVisibleToUser && node.isEnabled && node.isClickable &&
+                        (text == "send" || description == "send" ||
+                         id.endsWith(":id/send") || id.contains("send"))
+                }
+                if (sendButton?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) {
+                    clearWhatsAppFlow()
+                } else retryWhatsApp(500)
             }
         }
     }
