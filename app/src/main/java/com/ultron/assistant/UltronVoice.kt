@@ -15,6 +15,12 @@ object UltronVoice {
     @Synchronized
     fun speak(context: Context, text: String) {
         if (text.isBlank()) return
+        val fishKey = UltronSettings.get(context, "fish_api_key")
+        val fishVoiceId = UltronSettings.get(context, "fish_voice_id")
+        if (!fishKey.isNullOrBlank() && !fishVoiceId.isNullOrBlank() && UltronSettings.get(context, "voice_mode") == "fish") {
+            FishVoice.speak(context, text, fishKey, fishVoiceId)
+            return
+        }
         val tts = engine
         if (tts == null) {
             pending.addLast(text)
@@ -36,6 +42,12 @@ object UltronVoice {
         } else if (ready) {
             tts.speak(text, TextToSpeech.QUEUE_ADD, null, "ultron-" + System.nanoTime())
         } else pending.addLast(text)
+    }
+
+    @Synchronized
+    fun speakSystemFallback(context: Context, text: String) {
+        val tts = engine
+        if (tts != null && ready) tts.speak(text, TextToSpeech.QUEUE_ADD, null, "ultron-fallback-" + System.nanoTime()) else speak(context, text)
     }
 
     @Synchronized
