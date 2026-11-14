@@ -79,7 +79,6 @@ class MainActivity : Activity() {
         window.statusBarColor = bg
         window.navigationBarColor = bg
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-        UltronSettings.save(this, "voice_enabled", "false")
         buildDashboard()
         requestRuntimePermissions()
         refreshWeather()
@@ -184,7 +183,7 @@ class MainActivity : Activity() {
         features.addView(sectionTitle("⬡  ULTRON SYSTEMS"))
         val featureRows = listOf(
             listOf("⏰ REMINDERS" to { showFeature("Reminders", "Reminder scheduling is being wired up. This section is included for your first full app test.") }, "▤ NOTES" to { showNotes() }, "↻ ROUTINES" to { showFeature("Routines", "Create routines such as Good morning, Study mode, and Night mode. Routine actions are being wired up.") }),
-            listOf("◉ VOICE CLONE" to { chooseVoiceSample() }, "⌕ WEB" to { showFeature("Web access", "ULTRON's web search interface is included. Search-provider integration is still pending.") }, "▣ PHONE CONTROL" to { showPhoneControls() }),
+            listOf("◉ VOICE CLONE" to { configureAssemblyAIVoice() }, "⌕ WEB" to { showFeature("Web access", "ULTRON's web search interface is included. Search-provider integration is still pending.") }, "▣ PHONE CONTROL" to { showPhoneControls() }),
             listOf("◈ MEMORY" to { showMemories() }, "▦ CALENDAR" to { startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_CALENDAR)) }, "⚙ PERMISSIONS" to { openPermissionSettings() })
         )
         featureRows.forEach { items ->
@@ -230,6 +229,10 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, results: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, results)
         if (requestCode == 77) refreshAgenda()
+        if (requestCode == 79) {
+            if (results.any { it == PackageManager.PERMISSION_GRANTED }) startVoiceIfEnabled()
+            else { UltronSettings.save(this, "voice_enabled", "false"); statusTextOrToast("Microphone permission is required for voice listening") }
+        }
         if (requestCode == 78) {
             if (results.any { it == PackageManager.PERMISSION_GRANTED }) usePhoneLocation()
             else weatherText.text = "Location permission denied. Allow it in Android Settings > Apps > ULTRON > Permissions."
@@ -252,7 +255,7 @@ class MainActivity : Activity() {
         } else {
             UltronSettings.save(this, "voice_enabled", "true")
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startVoiceIfEnabled()
-            else requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 77)
+            else requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 79)
             statusTextOrToast("Voice listening starting")
         }
     }
@@ -471,11 +474,11 @@ class MainActivity : Activity() {
     }
 
     private fun showSettings() {
-        val options = arrayOf("AI / Groq API key", "Import voice sample", "WhatsApp notifications", "Calendar permission", "Weather location", "Saved memories", "App permissions", "About / feature status")
+        val options = arrayOf("AI / Groq API key", "AssemblyAI voice setup", "WhatsApp notifications", "Calendar permission", "Weather location", "Saved memories", "App permissions", "About / feature status")
         AlertDialog.Builder(this).setTitle("ULTRON SETTINGS").setItems(options) { _, which ->
             when (which) {
                 0 -> credentialDialog("Groq API key", "openai_api_key")
-                1 -> chooseVoiceSample()
+                1 -> configureAssemblyAIVoice()
                 2 -> startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                 3 -> requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), 77)
                 4 -> usePhoneLocation()
@@ -516,56 +519,15 @@ class MainActivity : Activity() {
             }.setNegativeButton("CANCEL", null).show()
     }
 
-    private fun chooseVoiceSample() {
-        try {
-            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "audio/*"
-            }
-            startActivityForResult(intent, 409)
-        } catch (_: Exception) {
-            showFeature("Voice sample", "Your phone could not open the audio picker.")
-        }
-    }
-
-    @Deprecated("Deprecated by Android, retained for broad device compatibility")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 409 && resultCode == RESULT_OK) {
-            val uri = data?.data ?: return
-            try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
-            UltronSettings.save(this, "voice_sample_uri", uri.toString())
-            cloneImportedVoice(uri)
-        }
-    }
-
-
-    private fun cloneImportedVoice(uri: Uri) {
-        val key = UltronSettings.get(this, "fish_api_key")
-        if (key.isNullOrBlank()) {
-            val field = EditText(this).apply { hint = "Fish Audio API key"; setTextColor(Color.WHITE); inputType = 129 }
-            AlertDialog.Builder(this).setTitle("Connect Fish Audio")
-                .setMessage("A Fish Audio API key is required to create a reusable voice clone. Cloning runs online and may use account credits.")
-                .setView(field)
-                .setPositiveButton("SAVE & CLONE") { _, _ ->
-                    val value = field.text.toString().trim()
-                    if (value.isBlank()) statusTextOrToast("API key is required to clone this voice")
-                    else { UltronSettings.save(this, "fish_api_key", value); startVoiceClone(uri, value) }
-                }.setNegativeButton("CANCEL", null).show()
-        } else startVoiceClone(uri, key)
-    }
-
-    private fun startVoiceClone(uri: Uri, key: String) {
-        showFeature("Creating voice clone", "Uploading your audio to Fish Audio and creating a private reusable voice model. Keep ULTRON open until it finishes.")
-        FishVoice.clone(this, uri, key) { success, message ->
-            runOnUiThread {
-                if (success) {
-                    UltronSettings.save(this, "voice_mode", "fish")
-                    showFeature("Voice cloned and activated", "$message\n\nULTRON will now use this imported voice for spoken replies.")
-                    UltronVoice.speak(this, "Voice profile activated. I am now speaking with your imported voice.")
-                } else showFeature("Voice clone failed", message)
-            }
-        }
+    private fun configureAssemblyAIVoice() {
+        showFeature(
+            "ASSEMBLYAI VOICE CLONE",
+            "Fish Audio has been removed from ULTRON's active voice path. Create a voice clone in your AssemblyAI dashboard using a recording you have permission to use, then copy its Voice ID. AssemblyAI currently creates the clone in its dashboard; ULTRON uses the ID to generate every spoken reply."
+        )
+        credentialDialog("AssemblyAI API key", "assemblyai_api_key")
+        handler.postDelayed({
+            credentialDialog("AssemblyAI cloned voice ID", "assemblyai_voice_id")
+        }, 350)
     }
 
     private fun showPhoneControls() {
