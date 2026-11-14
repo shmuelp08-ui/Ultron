@@ -15,6 +15,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.os.Bundle
 import android.net.Uri
+import android.provider.ContactsContract
 
 class VoiceWakeService : Service() {
 
@@ -593,9 +594,60 @@ class VoiceWakeService : Service() {
         return false
     }
 
+    private fun resolveWhatsAppNumber(contact: String): String? {
+        if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return null
+        val wanted = normalizeCommand(contact)
+        if (wanted.isBlank()) return null
+        val matches = mutableListOf<Pair<String, String>>()
+        try {
+            contentResolver.query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER),
+                null, null, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " COLLATE NOCASE ASC"
+            )?.use { cursor ->
+                val nameCol = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                val numberCol = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                while (cursor.moveToNext()) {
+                    val name = if (nameCol >= 0) cursor.getString(nameCol).orEmpty() else ""
+                    val number = if (numberCol >= 0) cursor.getString(numberCol).orEmpty() else ""
+                    val normalized = normalizeCommand(name)
+                    if (normalized == wanted || normalized.startsWith("$wanted ") || wanted.startsWith("$normalized ")) {
+                        val digits = number.filter { it.isDigit() }
+                        if (digits.length >= 7) matches.add(name to digits)
+                    }
+                }
+            }
+        } catch (_: SecurityException) { return null }
+        val exact = matches.filter { normalizeCommand(it.first) == wanted }.distinctBy { it.second }
+        if (exact.size == 1) return exact.first().second
+        if (exact.size > 1) return null
+        return matches.distinctBy { it.second }.singleOrNull()?.second
+    }
+
+    private fun openWhatsAppDeepLink(contact: String, message: String?): Boolean {
+        val number = resolveWhatsAppNumber(contact) ?: return false
+        val digits = number.trimStart('0')
+        if (digits.isBlank()) return false
+        val query = message?.takeIf { it.isNotBlank() }?.let { "?text=" + Uri.encode(it) }.orEmpty()
+        val url = Uri.parse("https://wa.me/$digits$query")
+        val intent = Intent(Intent.ACTION_VIEW, url).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (packageManager.getLaunchIntentForPackage("com.whatsapp") != null) setPackage("com.whatsapp")
+            else if (packageManager.getLaunchIntentForPackage("com.whatsapp.w4b") != null) setPackage("com.whatsapp.w4b")
+        }
+        return UltronAccessibilityService.openExternalIntent(intent) || openActivity(intent)
+    }
+
     private fun openWhatsAppContact(contact: String, message: String?): Boolean {
         if (contact.isBlank()) return false
         val keyguard = getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        if (!keyguard.isKeyguardLocked && openWhatsAppDeepLink(contact, message)) {
+            val response = if (message.isNullOrBlank()) "Opening your WhatsApp chat with $contact."
+                else "Opening $contact's WhatsApp chat with your message ready. Review it and tap Send."
+            updateNotification(response)
+            speakResponse(response)
+            return true
+        }
         if (keyguard.isKeyguardLocked) {
             val resumeIntent = Intent(this, MainActivity::class.java).apply {
                 putExtra("ultron_whatsapp_contact", contact)
