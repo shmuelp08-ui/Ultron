@@ -457,7 +457,7 @@ class VoiceWakeService : Service() {
         if (aliasedPackage != null) {
             val aliasIntent = packageManager.getLaunchIntentForPackage(aliasedPackage)
             if (aliasIntent != null) {
-                val opened = openActivity(aliasIntent)
+                val opened = launchAppPackage(aliasedPackage, aliasIntent)
                 val response = when {
                     launchQueuedForUnlock -> "Unlock your phone and tap the ULTRON notification to open $appRequest."
                     opened -> "Opening $appRequest."
@@ -510,7 +510,7 @@ class VoiceWakeService : Service() {
         if (match != null) {
             val launchIntent = packageManager.getLaunchIntentForPackage(match.first)
             if (launchIntent != null) {
-                val opened = openActivity(launchIntent)
+                val opened = launchAppPackage(match.first, launchIntent)
                 val response = when {
                     launchQueuedForUnlock -> "Unlock your phone and tap the ULTRON notification to open ${match.third}."
                     opened -> "Opening ${match.third}."
@@ -688,6 +688,15 @@ class VoiceWakeService : Service() {
             updateNotification(response)
             speakResponse(response)
         }
+    }
+
+    private fun launchAppPackage(packageName: String, fallbackIntent: Intent): Boolean {
+        val keyguard = getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        if (keyguard.isKeyguardLocked) return openActivity(fallbackIntent)
+        // AccessibilityService is the preferred launcher when enabled; fall back to
+        // the foreground voice service if the user has not enabled that optional bridge.
+        return UltronAccessibilityService.launchInstalledApp(this, packageName) ||
+            openActivity(fallbackIntent)
     }
 
     private fun openActivity(intent: Intent): Boolean {
