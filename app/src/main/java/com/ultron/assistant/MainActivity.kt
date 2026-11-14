@@ -26,6 +26,7 @@ import android.os.StatFs
 import android.provider.CalendarContract
 import android.provider.Settings
 import android.view.Gravity
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -77,12 +78,47 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        installCrashReporter()
         window.statusBarColor = bg
         window.navigationBarColor = bg
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         buildDashboard()
         requestRuntimePermissions()
         refreshWeather()
+        showPreviousCrashIfAny()
+    }
+
+    // Persist fatal launch/runtime crashes so the next launch can show the exact
+    // exception instead of leaving us guessing from a successful compile.
+    private fun installCrashReporter() {
+        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            try {
+                val report = Log.getStackTraceString(error)
+                openFileOutput("ultron_last_crash.txt", MODE_PRIVATE).use {
+                    it.write(report.toByteArray(Charsets.UTF_8))
+                }
+            } catch (_: Exception) { }
+            previousHandler?.uncaughtException(thread, error)
+        }
+    }
+
+    private fun showPreviousCrashIfAny() {
+        val file = java.io.File(filesDir, "ultron_last_crash.txt")
+        if (!file.exists()) return
+        val report = try { file.readText().take(12000) } catch (_: Exception) { "Crash report could not be read." }
+        AlertDialog.Builder(this)
+            .setTitle("ULTRON — LAST CRASH REPORT")
+            .setMessage(report)
+            .setPositiveButton("COPY & CLOSE") { _, _ ->
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ULTRON crash report", report))
+                file.delete()
+                statusTextOrToast("Crash report copied")
+            }
+            .setNegativeButton("CLOSE") { _, _ -> file.delete() }
+            .setCancelable(false)
+            .show()
     }
 
     private fun buildDashboard() {
@@ -624,7 +660,7 @@ class MainActivity : Activity() {
             cornerRadius = dp(13).toFloat()
             setStroke(dp(1), Color.rgb(18, 125, 177))
         }
-        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             setMargins(dp(3), dp(5), dp(3), dp(5))
         }
     }
