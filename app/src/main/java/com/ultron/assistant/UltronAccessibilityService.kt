@@ -26,11 +26,28 @@ class UltronAccessibilityService : AccessibilityService() {
             return true
         }
 
-        fun launchInstalledApp(context: Context, packageName: String): Boolean {
-            val launch = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
+        fun openExternalIntent(intent: Intent): Boolean {
+            val service = instance ?: return false
             return try {
-                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(launch)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                service.startActivity(intent)
+                true
+            } catch (_: Exception) { false }
+        }
+
+        fun launchInstalledApp(context: Context, packageName: String): Boolean {
+            val service = instance ?: return false
+            return try {
+                val manager = service.packageManager
+                val launch = manager.getLaunchIntentForPackage(packageName)
+                    ?: manager.queryIntentActivities(
+                        Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(packageName), 0
+                    ).firstOrNull()?.activityInfo?.let {
+                        Intent.makeMainActivity(android.content.ComponentName(it.packageName, it.name))
+                    }
+                    ?: return false
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                service.startActivity(launch)
                 true
             } catch (_: Exception) { false }
         }
