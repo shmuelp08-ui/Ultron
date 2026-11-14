@@ -108,17 +108,26 @@ class MainActivity : Activity() {
         statusText = text("VOICE OFF", 11f, Color.GRAY, true).apply { setPadding(dp(4), dp(8), dp(4), dp(8)) }
         root.addView(statusText)
 
-        val timePanel = panelCard()
-        val timeRow = row()
-        val timeCol = column()
-        clockText = text("00:00", 58f, cyan, true)
-        clockText.typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
-        dateText = text("INITIALIZING", 13f, cyanSoft, true)
-        timeCol.addView(clockText)
-        timeCol.addView(dateText)
-        timeRow.addView(timeCol, weightParams())
+        val timePanel = panelCard().apply { gravity = Gravity.CENTER_HORIZONTAL }
+        val timeRow = column().apply { gravity = Gravity.CENTER_HORIZONTAL }
+        // Prominent animated holographic core: centered and large enough to be unmistakable.
         val orb = CoreView(this)
-        timeRow.addView(orb, LinearLayout.LayoutParams(dp(112), dp(112)))
+        timeRow.addView(orb, LinearLayout.LayoutParams(dp(196), dp(196)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            bottomMargin = dp(2)
+        })
+        val coreLabel = text("◈  NEURAL CORE  ◈", 10f, cyanSoft, true).apply {
+            gravity = Gravity.CENTER
+            letterSpacing = .22f
+        }
+        timeRow.addView(coreLabel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        clockText = text("00:00", 58f, cyan, true).apply {
+            gravity = Gravity.CENTER
+            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+        }
+        dateText = text("INITIALIZING", 13f, cyanSoft, true).apply { gravity = Gravity.CENTER }
+        timeRow.addView(clockText)
+        timeRow.addView(dateText)
         timePanel.addView(timeRow)
         root.addView(timePanel)
 
