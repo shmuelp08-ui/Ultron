@@ -41,8 +41,13 @@ class VoiceWakeService : Service() {
         "youtube" to "com.google.android.youtube",
         "chrome" to "com.android.chrome",
         "maps" to "com.google.android.apps.maps",
+        "google maps" to "com.google.android.apps.maps",
         "spotify" to "com.spotify.music",
-        "gmail" to "com.google.android.gm"
+        "gmail" to "com.google.android.gm",
+        "play store" to "com.android.vending",
+        "google play" to "com.android.vending",
+        "messages" to "com.google.android.apps.messaging",
+        "phone" to "com.google.android.dialer"
     )
 
     override fun onCreate() {
@@ -451,9 +456,10 @@ class VoiceWakeService : Service() {
         if (aliasedPackage != null) {
             val aliasIntent = packageManager.getLaunchIntentForPackage(aliasedPackage)
             if (aliasIntent != null) {
-                openActivity(aliasIntent)
-                updateNotification("Opening " + appRequest)
-                speakResponse("Opening " + appRequest + ".")
+                val opened = openActivity(aliasIntent)
+                val response = if (opened) "Opening $appRequest." else "I couldn't open $appRequest. Android may have blocked the launch."
+                updateNotification(response)
+                speakResponse(response)
             } else {
                 updateNotification(appRequest + " is not installed or cannot be launched")
                 speakResponse(appRequest + " is not available on this phone.")
@@ -499,9 +505,10 @@ class VoiceWakeService : Service() {
         if (match != null) {
             val launchIntent = packageManager.getLaunchIntentForPackage(match.first)
             if (launchIntent != null) {
-                openActivity(launchIntent)
-                updateNotification("Opening ${match.third}")
-                speakResponse("Opening ${match.third}.")
+                val opened = openActivity(launchIntent)
+                val response = if (opened) "Opening ${match.third}." else "Android blocked opening ${match.third}."
+                updateNotification(response)
+                speakResponse(response)
             } else {
                 updateNotification("Can't launch ${match.third}")
             }
@@ -565,7 +572,7 @@ class VoiceWakeService : Service() {
         }
 
         if (command == "whatsapp" || command == "open whatsapp" || command == "go to whatsapp" ||
-            command == "open my whatsapp" || command == "launch whatsapp") {
+            command == "go on my whatsapp" || command == "open my whatsapp" || command == "launch whatsapp") {
             val intent = packageManager.getLaunchIntentForPackage("com.whatsapp")
                 ?: packageManager.getLaunchIntentForPackage("com.whatsapp.w4b")
             if (intent == null) {
@@ -579,6 +586,30 @@ class VoiceWakeService : Service() {
 
     private fun openWhatsAppContact(contact: String, message: String?): Boolean {
         if (contact.isBlank()) return false
+        val keyguard = getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        if (keyguard.isKeyguardLocked) {
+            val resumeIntent = Intent(this, MainActivity::class.java).apply {
+                putExtra("ultron_whatsapp_contact", contact)
+                putExtra("ultron_whatsapp_message", message)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            val pending = PendingIntent.getActivity(
+                this, 7401, resumeIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val notice = Notification.Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Unlock to continue in WhatsApp")
+                .setContentText("Tap after unlocking to open $contact's conversation.")
+                .setContentIntent(pending)
+                .setAutoCancel(true)
+                .setVisibility(Notification.VISIBILITY_PRIVATE)
+                .build()
+            getSystemService(NotificationManager::class.java).notify(741, notice)
+            updateNotification("Unlock your phone and tap the ULTRON notification to continue.")
+            speakResponse("Your phone is locked. Unlock it and tap the ULTRON notification to continue with $contact.")
+            return true
+        }
         if (!UltronAccessibilityService.isEnabled()) {
             val launch = packageManager.getLaunchIntentForPackage("com.whatsapp")
                 ?: packageManager.getLaunchIntentForPackage("com.whatsapp.w4b")
@@ -650,13 +681,39 @@ class VoiceWakeService : Service() {
         }
     }
 
-    private fun openActivity(intent: Intent) {
-        try {
+    private fun openActivity(intent: Intent): Boolean {
+        val keyguard = getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        if (keyguard.isKeyguardLocked) {
+            return try {
+                val launch = Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val pending = PendingIntent.getActivity(
+                    this, 7410, launch,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val notice = Notification.Builder(this, CHANNEL_ID)
+                    .setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setContentTitle("Unlock to open app")
+                    .setContentText("Tap to continue to the requested app.")
+                    .setContentIntent(pending)
+                    .setAutoCancel(true)
+                    .setVisibility(Notification.VISIBILITY_PRIVATE)
+                    .build()
+                getSystemService(NotificationManager::class.java).notify(742, notice)
+                updateNotification("Phone locked — tap the ULTRON notification after unlocking.")
+                true
+            } catch (_: Exception) {
+                updateNotification("Unlock your phone to open that app.")
+                false
+            }
+        }
+        return try {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
+            true
         } catch (_: Exception) {
             updateNotification("Android blocked opening that app")
             speakResponse("Android blocked that action.")
+            false
         }
     }
 
