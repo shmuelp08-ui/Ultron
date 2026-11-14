@@ -122,12 +122,12 @@ class MainActivity : Activity() {
         weatherText = text("Set a city to load live weather", 14f, Color.WHITE)
         weather.addView(weatherText)
         weather.addView(actionButton("SET LOCATION") { chooseWeatherCity() }, buttonParams())
-        two.addView(weather, weightParams(1))
+        two.addView(weather, weightParams(1f))
         val system = panelCard()
         system.addView(sectionTitle("▤  SYSTEM STATUS"))
         systemText = text("Reading device stats…", 13f, Color.WHITE)
         system.addView(systemText)
-        two.addView(system, weightParams(1))
+        two.addView(system, weightParams(1f))
         root.addView(two)
 
         val quick = panelCard()
@@ -138,7 +138,7 @@ class MainActivity : Activity() {
             val r = row()
             group.forEach { app ->
                 val b = actionButton("▣\n$app") { launchApp(app) }
-                r.addView(b, weightParams(1))
+                r.addView(b, weightParams(1f))
             }
             appGrid.addView(r)
         }
@@ -154,7 +154,7 @@ class MainActivity : Activity() {
         notifications.addView(actionButton("NOTIFICATION ACCESS") {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }, buttonParams())
-        side.addView(notifications, weightParams(1))
+        side.addView(notifications, weightParams(1f))
         val agenda = panelCard()
         agenda.addView(sectionTitle("▦  UP NEXT"))
         agendaText = text("Calendar permission needed", 12f, Color.WHITE)
@@ -162,7 +162,7 @@ class MainActivity : Activity() {
         agenda.addView(actionButton("OPEN CALENDAR") {
             startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_CALENDAR))
         }, buttonParams())
-        side.addView(agenda, weightParams(1))
+        side.addView(agenda, weightParams(1f))
         root.addView(side)
 
         val music = panelCard()
@@ -170,9 +170,9 @@ class MainActivity : Activity() {
         musicText = text("Control your current media session", 13f, Color.WHITE)
         music.addView(musicText)
         val mediaRow = row()
-        mediaRow.addView(actionButton("⏮") { mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS) }, weightParams(1))
-        mediaRow.addView(actionButton("▶ / ❚❚") { mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) }, weightParams(1))
-        mediaRow.addView(actionButton("⏭") { mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_NEXT) }, weightParams(1))
+        mediaRow.addView(actionButton("⏮") { mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS) }, weightParams(1f))
+        mediaRow.addView(actionButton("▶ / ❚❚") { mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) }, weightParams(1f))
+        mediaRow.addView(actionButton("⏭") { mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_NEXT) }, weightParams(1f))
         music.addView(mediaRow)
         root.addView(music)
 
@@ -194,9 +194,9 @@ class MainActivity : Activity() {
         root.addView(chat)
 
         val bottom = row()
-        bottom.addView(actionButton("▦ DASHBOARD") { scrollToTop() }, weightParams(1))
-        bottom.addView(actionButton("🎙 VOICE") { toggleVoice() }, weightParams(1))
-        bottom.addView(actionButton("⚙ SETTINGS") { showSettings() }, weightParams(1))
+        bottom.addView(actionButton("▦ DASHBOARD") { scrollToTop() }, weightParams(1f))
+        bottom.addView(actionButton("🎙 VOICE") { toggleVoice() }, weightParams(1f))
+        bottom.addView(actionButton("⚙ SETTINGS") { showSettings() }, weightParams(1f))
         root.addView(bottom)
     }
 
