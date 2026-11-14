@@ -18,7 +18,7 @@ object UltronMemory {
         if (existing.lastOrNull()?.equals(value, ignoreCase = true) == true) return
         val updated = (existing + value).takeLast(MAX_MEMORIES)
         val array = JSONArray()
-        updated.forEach(array::put)
+        updated.forEach { array.put(it) }
         prefs.edit().putString(MEMORIES, array.toString()).apply()
     }
 
