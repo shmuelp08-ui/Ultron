@@ -67,6 +67,7 @@ class MainActivity : Activity() {
                 clockText.text = SimpleDateFormat("h:mm", Locale.getDefault()).format(Date())
                 dateText.text = SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(Date()).uppercase(Locale.getDefault())
                 refreshSystem()
+                refreshVoiceStatus()
                 refreshNotifications()
                 refreshAgenda()
                 handler.postDelayed(this, 1000)
@@ -103,6 +104,9 @@ class MainActivity : Activity() {
         val live = text("● SYSTEM ONLINE", 10f, cyanSoft, true).apply { gravity = Gravity.CENTER_VERTICAL }
         top.addView(live)
         root.addView(top)
+
+        statusText = text("VOICE OFF", 11f, Color.GRAY, true).apply { setPadding(dp(4), dp(8), dp(4), dp(8)) }
+        root.addView(statusText)
 
         val timePanel = panelCard()
         val timeRow = row()
@@ -240,20 +244,38 @@ class MainActivity : Activity() {
     }
 
     private fun startVoiceIfEnabled() {
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
-            UltronSettings.get(this, "voice_enabled") == "true") {
-            try { startForegroundService(Intent(this, VoiceWakeService::class.java)) } catch (_: Exception) { }
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED ||
+            UltronSettings.get(this, "voice_enabled") != "true") return
+        UltronSettings.save(this, "voice_status", "STARTING — WAITING FOR MICROPHONE")
+        try { startForegroundService(Intent(this, VoiceWakeService::class.java)) }
+        catch (e: Exception) {
+            UltronSettings.save(this, "voice_status", "START FAILED — " + e.javaClass.simpleName)
+            statusTextOrToast("Voice startup failed: " + e.javaClass.simpleName)
         }
+    }
+
+    private fun refreshVoiceStatus() {
+        val enabled = UltronSettings.get(this, "voice_enabled") == "true"
+        val state = if (enabled) UltronSettings.get(this, "voice_status") ?: "STARTING" else "VOICE OFF"
+        statusText.text = "●  " + state
+        statusText.setTextColor(when {
+            !enabled -> Color.GRAY
+            state.startsWith("LISTENING") || state.startsWith("HEARING") -> cyan
+            state.startsWith("START") || state.startsWith("RECONNECT") || state.startsWith("PROCESS") -> Color.YELLOW
+            else -> Color.RED
+        })
     }
 
     private fun toggleVoice() {
         val enabled = UltronSettings.get(this, "voice_enabled") == "true"
         if (enabled) {
             UltronSettings.save(this, "voice_enabled", "false")
+            UltronSettings.save(this, "voice_status", "VOICE OFF")
             startService(Intent(this, VoiceWakeService::class.java).setAction(VoiceWakeService.ACTION_STOP))
             statusTextOrToast("Voice listening paused")
         } else {
             UltronSettings.save(this, "voice_enabled", "true")
+            UltronSettings.save(this, "voice_status", "STARTING — REQUESTING MICROPHONE")
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startVoiceIfEnabled()
             else requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 79)
             statusTextOrToast("Voice listening starting")
