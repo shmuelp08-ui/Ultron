@@ -701,7 +701,9 @@ class MainActivity : Activity() {
             handler.post(ticker)
             refreshNotifications()
             refreshAgenda()
-            startVoiceIfEnabled()
+            refreshVoiceStatus()
+            // Do not auto-start the microphone service on every Activity resume.
+            // Voice starts only after the user explicitly enables it with the voice control.
         }
     }
     override fun onPause() { handler.removeCallbacks(ticker); super.onPause() }
