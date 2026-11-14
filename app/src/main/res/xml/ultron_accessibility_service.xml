@@ -5,6 +5,7 @@
     android:accessibilityFlags="flagDefault|flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"
     android:canPerformGestures="true"
+    android:canTakeScreenshot="true"
     android:description="@string/ultron_accessibility_description"
     android:notificationTimeout="75"
     android:settingsActivity="com.ultron.assistant.MainActivity" />
