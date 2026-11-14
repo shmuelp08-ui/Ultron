@@ -13,6 +13,8 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.location.Geocoder
+import android.location.LocationManager
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
@@ -122,7 +124,8 @@ class MainActivity : Activity() {
         weather.addView(sectionTitle("◉  LOCAL WEATHER"))
         weatherText = text("Set a city to load live weather", 14f, Color.WHITE)
         weather.addView(weatherText)
-        weather.addView(actionButton("SET LOCATION") { chooseWeatherCity() }, buttonParams())
+        weather.addView(actionButton("USE MY PHONE LOCATION") { usePhoneLocation() }, buttonParams())
+        weather.addView(actionButton("ENTER CITY MANUALLY") { chooseWeatherCity() }, buttonParams())
         two.addView(weather, weightParams(1f))
         val system = panelCard()
         system.addView(sectionTitle("▤  SYSTEM STATUS"))
@@ -227,6 +230,10 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, results: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, results)
         if (requestCode == 77) refreshAgenda()
+        if (requestCode == 78) {
+            if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) usePhoneLocation()
+            else weatherText.text = "Location permission denied. Allow it in Android Settings > Apps > ULTRON > Permissions."
+        }
     }
 
     private fun startVoiceIfEnabled() {
@@ -299,6 +306,72 @@ class MainActivity : Activity() {
         } catch (_: Exception) { agendaText.text = "Calendar unavailable" }
     }
 
+
+    private fun usePhoneLocation() {
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 78)
+            weatherText.text = "Allow location access, then tap USE MY PHONE LOCATION again."
+            return
+        }
+        weatherText.text = "Finding your current location…"
+        try {
+            val manager = getSystemService(LOCATION_SERVICE) as LocationManager
+            val providers = manager.getProviders(true)
+            val last = providers.mapNotNull { p -> try { manager.getLastKnownLocation(p) } catch (_: Exception) { null } }.maxByOrNull { it.time }
+            if (last != null && System.currentTimeMillis() - last.time < 30 * 60 * 1000L) {
+                loadWeatherAt(last.latitude, last.longitude, "Your current location")
+                return
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val provider = when {
+                    providers.contains(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
+                    providers.contains(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
+                    else -> null
+                }
+                if (provider == null) { weatherText.text = "Location is turned off. Enable Location in Android settings."; return }
+                manager.getCurrentLocation(provider, null, mainExecutor) { location ->
+                    if (location != null) loadWeatherAt(location.latitude, location.longitude, "Your current location")
+                    else runOnUiThread { weatherText.text = "Couldn't get a location fix. Turn on Location and try again." }
+                }
+            } else {
+                weatherText.text = "No recent location. Turn on Location or enter a city manually."
+            }
+        } catch (_: SecurityException) {
+            weatherText.text = "Location permission is missing. Allow it in Android app permissions."
+        } catch (_: Exception) {
+            weatherText.text = "Couldn't access your location. Check that Location is turned on."
+        }
+    }
+
+    private fun loadWeatherAt(lat: Double, lon: Double, fallbackName: String) {
+        weatherText.text = "Loading local weather…"
+        Thread {
+            try {
+                val forecast = JSONObject(URL("https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto").readText())
+                val current = forecast.getJSONObject("current")
+                val daily = forecast.getJSONObject("daily")
+                var placeName = fallbackName
+                try {
+                    if (Geocoder.isPresent()) {
+                        @Suppress("DEPRECATION")
+                        val address = Geocoder(this, Locale.getDefault()).getFromLocation(lat, lon, 1)?.firstOrNull()
+                        placeName = address?.locality ?: address?.subAdminArea ?: address?.adminArea ?: fallbackName
+                    }
+                } catch (_: Exception) { }
+                val label = "${current.getDouble("temperature_2m").toInt()}°  ${weatherDescription(current.getInt("weather_code"))}\n$placeName  •  H ${daily.getJSONArray("temperature_2m_max").getDouble(0).toInt()}° / L ${daily.getJSONArray("temperature_2m_min").getDouble(0).toInt()}°"
+                runOnUiThread {
+                    UltronSettings.save(this, "weather_lat", lat.toString())
+                    UltronSettings.save(this, "weather_lon", lon.toString())
+                    UltronSettings.save(this, "weather_city", placeName)
+                    weatherText.text = label
+                }
+            } catch (_: Exception) {
+                runOnUiThread { weatherText.text = "Weather unavailable. Check your internet connection and try again." }
+            }
+        }.start()
+    }
+
     private fun chooseWeatherCity() {
         val input = EditText(this).apply {
             hint = "City (e.g. Beit Shemesh)"
@@ -316,6 +389,12 @@ class MainActivity : Activity() {
     }
 
     private fun refreshWeather() {
+        val savedLat = UltronSettings.get(this, "weather_lat")?.toDoubleOrNull()
+        val savedLon = UltronSettings.get(this, "weather_lon")?.toDoubleOrNull()
+        if (savedLat != null && savedLon != null) {
+            loadWeatherAt(savedLat, savedLon, UltronSettings.get(this, "weather_city") ?: "Saved location")
+            return
+        }
         val city = UltronSettings.get(this, "weather_city")
         if (city.isNullOrBlank()) { weatherText.text = "Tap SET LOCATION to choose your city"; return }
         weatherText.text = "Loading weather for $city…"
@@ -399,7 +478,7 @@ class MainActivity : Activity() {
                 1 -> chooseVoiceSample()
                 2 -> startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                 3 -> requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), 77)
-                4 -> chooseWeatherCity()
+                4 -> usePhoneLocation()
                 5 -> showMemories()
                 6 -> openPermissionSettings()
                 7 -> showFeature("ULTRON feature status", "Included now: AI chat, saved memory, conversation history, live clock, weather, calendar, notifications, media controls, app launcher, notes, reminders section, routines section, web section, phone controls section, and voice-sample import. Some advanced integrations still need implementation and device testing.")
@@ -456,7 +535,36 @@ class MainActivity : Activity() {
             val uri = data?.data ?: return
             try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             UltronSettings.save(this, "voice_sample_uri", uri.toString())
-            showFeature("Voice sample imported", "ULTRON saved the selected audio file reference. Actual local voice-model training and cloning still need to be integrated.")
+            cloneImportedVoice(uri)
+        }
+    }
+
+
+    private fun cloneImportedVoice(uri: Uri) {
+        val key = UltronSettings.get(this, "fish_api_key")
+        if (key.isNullOrBlank()) {
+            val field = EditText(this).apply { hint = "Fish Audio API key"; setTextColor(Color.WHITE); inputType = 129 }
+            AlertDialog.Builder(this).setTitle("Connect Fish Audio")
+                .setMessage("A Fish Audio API key is required to create a reusable voice clone. Cloning runs online and may use account credits.")
+                .setView(field)
+                .setPositiveButton("SAVE & CLONE") { _, _ ->
+                    val value = field.text.toString().trim()
+                    if (value.isBlank()) statusTextOrToast("API key is required to clone this voice")
+                    else { UltronSettings.save(this, "fish_api_key", value); startVoiceClone(uri, value) }
+                }.setNegativeButton("CANCEL", null).show()
+        } else startVoiceClone(uri, key)
+    }
+
+    private fun startVoiceClone(uri: Uri, key: String) {
+        showFeature("Creating voice clone", "Uploading your audio to Fish Audio and creating a private reusable voice model. Keep ULTRON open until it finishes.")
+        FishVoice.clone(this, uri, key) { success, message ->
+            runOnUiThread {
+                if (success) {
+                    UltronSettings.save(this, "voice_mode", "fish")
+                    showFeature("Voice cloned and activated", "$message\n\nULTRON will now use this imported voice for spoken replies.")
+                    UltronVoice.speak(this, "Voice profile activated. I am now speaking with your imported voice.")
+                } else showFeature("Voice clone failed", message)
+            }
         }
     }
 
