@@ -691,6 +691,7 @@ class VoiceWakeService : Service() {
     }
 
     private fun launchAppPackage(packageName: String, fallbackIntent: Intent): Boolean {
+        launchQueuedForUnlock = false
         val keyguard = getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
         if (keyguard.isKeyguardLocked) return openActivity(fallbackIntent)
         // AccessibilityService is the preferred launcher when enabled; fall back to
