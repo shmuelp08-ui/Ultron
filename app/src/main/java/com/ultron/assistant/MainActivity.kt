@@ -71,6 +71,7 @@ class MainActivity : Activity() {
                 refreshVoiceStatus()
                 refreshNotifications()
                 refreshAgenda()
+                refreshMediaStatus()
                 handler.postDelayed(this, 1000)
             }
         }
@@ -510,13 +511,79 @@ class MainActivity : Activity() {
         if (launch != null) startActivity(launch) else statusTextOrToast("Couldn't open $label")
     }
 
+    private fun activeMediaController(): android.media.session.MediaController? {
+        return try {
+            val manager = getSystemService(Context.MEDIA_SESSION_SERVICE) as android.media.session.MediaSessionManager
+            val listener = android.content.ComponentName(this, WhatsAppNotificationListener::class.java)
+            val sessions = manager.getActiveSessions(listener)
+            sessions.firstOrNull {
+                val state = it.playbackState?.state
+                state == android.media.session.PlaybackState.STATE_PLAYING ||
+                    state == android.media.session.PlaybackState.STATE_PAUSED ||
+                    state == android.media.session.PlaybackState.STATE_BUFFERING ||
+                    state == android.media.session.PlaybackState.STATE_CONNECTING
+            } ?: sessions.firstOrNull()
+        } catch (_: SecurityException) {
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun refreshMediaStatus() {
+        if (!::musicText.isInitialized) return
+        val controller = activeMediaController()
+        musicText.text = when {
+            controller != null -> {
+                val title = controller.metadata?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE)
+                val artist = controller.metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ARTIST)
+                val state = controller.playbackState?.state
+                val status = if (state == android.media.session.PlaybackState.STATE_PLAYING) "PLAYING" else "PAUSED / READY"
+                listOfNotNull(status, title, artist).joinToString("  •  ")
+            }
+            !isNotificationListenerEnabled() -> "Enable ULTRON Notification Access to control the active media session."
+            else -> "No active media session. Start playback in Spotify, YouTube, or another media app."
+        }
+    }
+
+    private fun isNotificationListenerEnabled(): Boolean {
+        val enabled = android.provider.Settings.Secure.getString(
+            contentResolver, "enabled_notification_listeners"
+        ).orEmpty()
+        return enabled.contains(packageName)
+    }
+
     private fun mediaKey(keyCode: Int) {
+        val controller = activeMediaController()
+        if (controller == null) {
+            if (!isNotificationListenerEnabled()) {
+                statusTextOrToast("Enable ULTRON Notification Access to control media.")
+                try { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) } catch (_: Exception) { }
+            } else {
+                statusTextOrToast("No active media session. Start playing media first.")
+            }
+            refreshMediaStatus()
+            return
+        }
         try {
-            val down = android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, keyCode)
-            val up = android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, keyCode)
-            sendBroadcast(Intent(Intent.ACTION_MEDIA_BUTTON).putExtra(Intent.EXTRA_KEY_EVENT, down))
-            sendBroadcast(Intent(Intent.ACTION_MEDIA_BUTTON).putExtra(Intent.EXTRA_KEY_EVENT, up))
-        } catch (_: Exception) { statusTextOrToast("Media control unavailable") }
+            when (keyCode) {
+                android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS -> controller.transportControls.skipToPrevious()
+                android.view.KeyEvent.KEYCODE_MEDIA_NEXT -> controller.transportControls.skipToNext()
+                android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                    if (controller.playbackState?.state == android.media.session.PlaybackState.STATE_PLAYING) {
+                        controller.transportControls.pause()
+                    } else {
+                        controller.transportControls.play()
+                    }
+                }
+                else -> statusTextOrToast("Unsupported media action")
+            }
+            handler.postDelayed({ refreshMediaStatus() }, 250)
+        } catch (_: SecurityException) {
+            statusTextOrToast("Android denied media-session access. Re-enable ULTRON Notification Access.")
+        } catch (_: Exception) {
+            statusTextOrToast("The active media app rejected that control.")
+        }
     }
 
     private fun sendToAI() {
