@@ -3,6 +3,10 @@ package com.ultron.assistant
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
+import android.content.ContentValues
+import android.graphics.Bitmap
+import android.os.Build
+import android.provider.MediaStore
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
@@ -18,6 +22,16 @@ class UltronAccessibilityService : AccessibilityService() {
 
         fun isEnabled(): Boolean = instance != null
         fun perform(action: Int): Boolean = instance?.performGlobalAction(action) ?: false
+
+        fun captureScreenshot(callback: (Boolean, String) -> Unit): Boolean {
+            val service = instance ?: return false
+            if (Build.VERSION.SDK_INT < 30) {
+                callback(false, "Automatic screenshots require Android 11 or newer.")
+                return true
+            }
+            service.captureDisplayScreenshot(callback)
+            return true
+        }
 
         fun openWhatsAppConversation(contact: String, message: String? = null): Boolean {
             if (contact.isBlank()) return false
@@ -63,6 +77,64 @@ class UltronAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+    }
+
+    private fun captureDisplayScreenshot(callback: (Boolean, String) -> Unit) {
+        if (Build.VERSION.SDK_INT < 30) {
+            callback(false, "Automatic screenshots require Android 11 or newer.")
+            return
+        }
+        try {
+            takeScreenshot(android.view.Display.DEFAULT_DISPLAY, mainExecutor,
+                object : TakeScreenshotCallback {
+                    override fun onSuccess(screenshot: ScreenshotResult) {
+                        var bitmap: Bitmap? = null
+                        try {
+                            val hardware = screenshot.hardwareBuffer
+                            bitmap = Bitmap.wrapHardwareBuffer(hardware, screenshot.colorSpace)
+                                ?.copy(Bitmap.Config.ARGB_8888, false)
+                            hardware.close()
+                            if (bitmap == null) {
+                                callback(false, "Android did not provide a screenshot image.")
+                                return
+                            }
+                            val name = "ULTRON_${java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())}.png"
+                            val values = ContentValues().apply {
+                                put(MediaStore.Images.Media.DISPLAY_NAME, name)
+                                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/ULTRON")
+                                put(MediaStore.Images.Media.IS_PENDING, 1)
+                            }
+                            val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                            if (uri == null) {
+                                callback(false, "Couldn't create the screenshot file.")
+                                return
+                            }
+                            val saved = contentResolver.openOutputStream(uri)?.use { output ->
+                                bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+                            } == true
+                            if (saved) {
+                                val done = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
+                                contentResolver.update(uri, done, null, null)
+                                callback(true, "Screenshot saved to Pictures/ULTRON.")
+                            } else {
+                                contentResolver.delete(uri, null, null)
+                                callback(false, "Couldn't save the screenshot.")
+                            }
+                        } catch (e: Exception) {
+                            callback(false, "Screenshot failed: ${e.javaClass.simpleName}.")
+                        } finally {
+                            bitmap?.recycle()
+                        }
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        callback(false, "Android couldn't capture the screen (error $errorCode).")
+                    }
+                })
+        } catch (e: Exception) {
+            callback(false, "Screenshot failed: ${e.javaClass.simpleName}.")
+        }
     }
 
     private fun beginWhatsAppFlow(contact: String, message: String?) {
