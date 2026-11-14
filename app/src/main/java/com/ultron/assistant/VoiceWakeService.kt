@@ -58,20 +58,35 @@ class VoiceWakeService : Service() {
             return START_NOT_STICKY
         }
 
-        val notification = buildNotification("Starting voice system...")
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        // Promote the service immediately. Android 14+ enforces microphone
+        // foreground-service prerequisites and may throw SecurityException.
+        try {
+            val notification = buildNotification("Starting voice system...")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: SecurityException) {
+            active = false
+            UltronSettings.save(this, "voice_enabled", "false")
+            stopSelf()
+            return START_NOT_STICKY
+        } catch (e: RuntimeException) {
+            active = false
+            UltronSettings.save(this, "voice_enabled", "false")
+            stopSelf()
+            return START_NOT_STICKY
         }
 
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
             != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            UltronSettings.save(this, "voice_enabled", "false")
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -79,7 +94,17 @@ class VoiceWakeService : Service() {
         if (!active) {
             active = true
             acquireWakeLock()
-            startRecognition()
+            try {
+                startRecognition()
+            } catch (e: RuntimeException) {
+                updateNotification("Voice startup failed — check microphone permissions")
+                active = false
+                releaseWakeLock()
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                UltronSettings.save(this, "voice_enabled", "false")
+                return START_NOT_STICKY
+            }
         }
 
         return START_STICKY
@@ -427,20 +452,22 @@ class VoiceWakeService : Service() {
         }
     }
 
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+        } catch (_: RuntimeException) { }
+        wakeLock = null
+    }
+
     override fun onDestroy() {
         active = false
         restartHandler.removeCallbacksAndMessages(null)
-        recognizer?.cancel()
-        recognizer?.destroy()
+        try { recognizer?.cancel() } catch (_: RuntimeException) { }
+        try { recognizer?.destroy() } catch (_: RuntimeException) { }
         recognizer = null
-        UltronVoice.stop()
-
-        try {
-            wakeLock?.release()
-        } catch (_: Exception) {
-        }
-
-        wakeLock = null
+        try { UltronVoice.stop() } catch (_: RuntimeException) { }
+        releaseWakeLock()
+        try { stopForeground(STOP_FOREGROUND_REMOVE) } catch (_: RuntimeException) { }
         super.onDestroy()
     }
 
