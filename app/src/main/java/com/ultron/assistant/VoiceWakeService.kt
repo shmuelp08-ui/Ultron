@@ -30,6 +30,7 @@ class VoiceWakeService : Service() {
     private var recognitionGeneration = 0
     private var active = false
     private var waitingForCommand = false
+    private var launchQueuedForUnlock = false
     @Volatile private var voicePauseUntil = 0L
     private var wakeLock: PowerManager.WakeLock? = null
     // Service Context is not attached during construction; initialize Handler in onCreate.
@@ -457,7 +458,11 @@ class VoiceWakeService : Service() {
             val aliasIntent = packageManager.getLaunchIntentForPackage(aliasedPackage)
             if (aliasIntent != null) {
                 val opened = openActivity(aliasIntent)
-                val response = if (opened) "Opening $appRequest." else "I couldn't open $appRequest. Android may have blocked the launch."
+                val response = when {
+                    launchQueuedForUnlock -> "Unlock your phone and tap the ULTRON notification to open $appRequest."
+                    opened -> "Opening $appRequest."
+                    else -> "I couldn't open $appRequest. Android may have blocked the launch."
+                }
                 updateNotification(response)
                 speakResponse(response)
             } else {
@@ -506,7 +511,11 @@ class VoiceWakeService : Service() {
             val launchIntent = packageManager.getLaunchIntentForPackage(match.first)
             if (launchIntent != null) {
                 val opened = openActivity(launchIntent)
-                val response = if (opened) "Opening ${match.third}." else "Android blocked opening ${match.third}."
+                val response = when {
+                    launchQueuedForUnlock -> "Unlock your phone and tap the ULTRON notification to open ${match.third}."
+                    opened -> "Opening ${match.third}."
+                    else -> "Android blocked opening ${match.third}."
+                }
                 updateNotification(response)
                 speakResponse(response)
             } else {
@@ -682,8 +691,10 @@ class VoiceWakeService : Service() {
     }
 
     private fun openActivity(intent: Intent): Boolean {
+        launchQueuedForUnlock = false
         val keyguard = getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
         if (keyguard.isKeyguardLocked) {
+            launchQueuedForUnlock = true
             return try {
                 val launch = Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 val pending = PendingIntent.getActivity(
