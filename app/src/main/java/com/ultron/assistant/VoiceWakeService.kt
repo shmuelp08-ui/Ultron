@@ -561,8 +561,8 @@ class VoiceWakeService : Service() {
         }
 
         val contactPatterns = listOf(
-            Regex("^(?:open|go to|show me) (?:my )?(?:whatsapp )?(?:chat|conversation) with (.+)$"),
-            Regex("^(?:open|go to) whatsapp (?:chat|conversation) with (.+)$"),
+            Regex("^(?:open|go to|show me) (?:my )?(?:whatsapp )?(?:chat|conversation) with (.+?)(?: on whatsapp)?$"),
+            Regex("^(?:open|go to) whatsapp (?:chat|conversation) with (.+?)(?: on whatsapp)?$"),
             Regex("^(?:open|go to) (.+?) on whatsapp$")
         )
         for (pattern in contactPatterns) {
