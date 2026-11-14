@@ -14,6 +14,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.os.Bundle
+import android.net.Uri
 
 class VoiceWakeService : Service() {
 
@@ -21,6 +22,8 @@ class VoiceWakeService : Service() {
         const val ACTION_STOP = "com.ultron.assistant.STOP_VOICE"
         private const val CHANNEL_ID = "ultron_voice_channel"
         private const val NOTIFICATION_ID = 404
+        // User-provided Philadelphia, PA WhatsApp destination (E.164 digits).
+        private const val WHATSAPP_NUMBER = "12154320383"
     }
 
     private var recognizer: SpeechRecognizer? = null
@@ -239,7 +242,15 @@ class VoiceWakeService : Service() {
                         if (!isCurrent()) return
                         UltronSettings.save(this@VoiceWakeService, "voice_status", "RECONNECTING — SPEECH ERROR " + error)
                         updateNotification("Speech error " + error + " — reconnecting")
-                        restartListening(if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 1800 else 900)
+                        val retryDelay = when (error) {
+                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 1800L
+                            SpeechRecognizer.ERROR_NO_MATCH,
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> 500L
+                            SpeechRecognizer.ERROR_NETWORK,
+                            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> 2200L
+                            else -> 1100L
+                        }
+                        restartListening(retryDelay)
                     }
 
                     override fun onResults(results: Bundle?) {
@@ -253,7 +264,8 @@ class VoiceWakeService : Service() {
                             ?: emptyList()
 
                         processSpeech(spokenOptions)
-                        restartListening(700)
+                        // Give command handling/TTS a moment before reopening the recognizer.
+                        restartListening(1400)
                     }
 
                     override fun onPartialResults(
@@ -286,8 +298,12 @@ class VoiceWakeService : Service() {
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
             )
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-US")
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 900L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 650L)
         }
 
         try {
@@ -379,6 +395,18 @@ class VoiceWakeService : Service() {
             UltronConversation.addTurn(this, "ULTRON", answer)
             updateNotification(answer.take(120))
             UltronVoice.speak(this, answer)
+            return
+        }
+
+        // WhatsApp: open the user-supplied chat, or prepare a dictated message.
+        // WhatsApp displays the draft; the user must review and tap Send.
+        val whatsappMessage = extractWhatsAppMessage(spoken)
+        if (whatsappMessage != null) {
+            openWhatsAppChat(whatsappMessage)
+            return
+        }
+        if (spoken.contains("whatsapp") || spoken.contains("what s app")) {
+            openWhatsAppChat(null)
             return
         }
 
@@ -509,6 +537,58 @@ class VoiceWakeService : Service() {
                 }
             }
         }.start()
+    }
+
+    private fun extractWhatsAppMessage(command: String): String? {
+        val patterns = listOf(
+            Regex("^(?:send|write|text|message) (?:a )?(?:whatsapp )?(?:message )?(.+)$"),
+            Regex("^whatsapp (?:message )?(.+)$"),
+            Regex("^send (.+) on whatsapp$")
+        )
+        for (pattern in patterns) {
+            val match = pattern.find(command) ?: continue
+            val message = match.groupValues[1].trim()
+                .removeSuffix(" to my contact")
+                .removeSuffix(" to that number")
+                .trim()
+            if (message.isNotBlank() && message !in listOf("hi", "hello")) return message
+        }
+        return null
+    }
+
+    private fun openWhatsAppChat(message: String?) {
+        val encoded = message?.let { "?text=" + Uri.encode(it) }.orEmpty()
+        val url = Uri.parse("https://wa.me/" + WHATSAPP_NUMBER + encoded)
+        val whatsappIntent = Intent(Intent.ACTION_VIEW, url).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            setPackage("com.whatsapp")
+        }
+        try {
+            startActivity(whatsappIntent)
+            val response = if (message.isNullOrBlank()) {
+                "Opening your WhatsApp chat. Tell me what message to prepare."
+            } else {
+                "I've prepared that message in WhatsApp. Review it and tap Send."
+            }
+            updateNotification(response)
+            UltronVoice.speak(this, response)
+        } catch (_: android.content.ActivityNotFoundException) {
+            try {
+                val browserIntent = Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(browserIntent)
+                val response = "WhatsApp isn't available to open directly. I opened the chat link in your browser."
+                updateNotification(response)
+                UltronVoice.speak(this, response)
+            } catch (_: Exception) {
+                val response = "I couldn't open WhatsApp. Check that it's installed."
+                updateNotification(response)
+                UltronVoice.speak(this, response)
+            }
+        } catch (_: Exception) {
+            val response = "I couldn't open that WhatsApp chat."
+            updateNotification(response)
+            UltronVoice.speak(this, response)
+        }
     }
 
     private fun openActivity(intent: Intent) {
