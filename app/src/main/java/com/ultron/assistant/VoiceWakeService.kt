@@ -746,10 +746,29 @@ class VoiceWakeService : Service() {
         launchQueuedForUnlock = false
         val keyguard = getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
         if (keyguard.isKeyguardLocked) return openActivity(fallbackIntent)
-        // AccessibilityService is the preferred launcher when enabled; fall back to
-        // the foreground voice service if the user has not enabled that optional bridge.
-        return UltronAccessibilityService.launchInstalledApp(this, packageName) ||
-            openActivity(fallbackIntent)
+        // Android blocks ordinary background services from launching activities.
+        // The user-enabled accessibility bridge is the supported phone-wide launcher.
+        if (UltronAccessibilityService.launchInstalledApp(this, packageName)) return true
+        if (!UltronAccessibilityService.isEnabled()) {
+            val settingsIntent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            val pending = PendingIntent.getActivity(
+                this, 7411, settingsIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val notice = Notification.Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Enable ULTRON phone control")
+                .setContentText("Turn on ULTRON Phone Control once to launch apps by voice from anywhere.")
+                .setContentIntent(pending)
+                .setAutoCancel(true)
+                .setVisibility(Notification.VISIBILITY_PRIVATE)
+                .build()
+            getSystemService(NotificationManager::class.java).notify(743, notice)
+            updateNotification("Enable ULTRON Phone Control in Accessibility settings to open apps by voice outside ULTRON.")
+            speakResponse("To open apps by voice from anywhere, enable ULTRON Phone Control in Accessibility settings once.")
+            return false
+        }
+        return openActivity(fallbackIntent)
     }
 
     private fun openActivity(intent: Intent): Boolean {
