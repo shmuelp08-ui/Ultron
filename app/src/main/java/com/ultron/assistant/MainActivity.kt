@@ -87,6 +87,29 @@ class MainActivity : Activity() {
         requestRuntimePermissions()
         refreshWeather()
         showPreviousCrashIfAny()
+        resumePendingWhatsAppAction(intent)
+    }
+
+    private fun resumePendingWhatsAppAction(source: Intent?) {
+        val contact = source?.getStringExtra("ultron_whatsapp_contact") ?: return
+        val message = source.getStringExtra("ultron_whatsapp_message")
+        source.removeExtra("ultron_whatsapp_contact")
+        source.removeExtra("ultron_whatsapp_message")
+        var attempts = 0
+        val retry = object : Runnable {
+            override fun run() {
+                attempts++
+                if (UltronAccessibilityService.openWhatsAppConversation(contact, message)) {
+                    statusTextOrToast("Continuing to $contact in WhatsApp")
+                } else if (attempts < 5) {
+                    handler.postDelayed(this, 700)
+                } else {
+                    statusTextOrToast("Enable ULTRON Phone Control in Accessibility settings, then try again.")
+                    try { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (_: Exception) { }
+                }
+            }
+        }
+        handler.postDelayed(retry, 900)
     }
 
     // Persist fatal launch/runtime crashes so the next launch can show the exact
