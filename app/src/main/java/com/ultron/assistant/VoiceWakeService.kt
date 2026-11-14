@@ -52,6 +52,7 @@ class VoiceWakeService : Service() {
 
         if (intent?.action == ACTION_STOP) {
             UltronSettings.save(this, "voice_enabled", "false")
+            UltronSettings.save(this, "voice_status", "VOICE OFF")
             active = false
             restartHandler.removeCallbacksAndMessages(null)
             stopSelf()
@@ -73,11 +74,13 @@ class VoiceWakeService : Service() {
             }
         } catch (e: SecurityException) {
             active = false
+            UltronSettings.save(this, "voice_status", "MICROPHONE BLOCKED — CHECK PERMISSIONS")
             UltronSettings.save(this, "voice_enabled", "false")
             stopSelf()
             return START_NOT_STICKY
         } catch (e: RuntimeException) {
             active = false
+            UltronSettings.save(this, "voice_status", "VOICE START FAILED — " + e.javaClass.simpleName)
             UltronSettings.save(this, "voice_enabled", "false")
             stopSelf()
             return START_NOT_STICKY
@@ -85,6 +88,7 @@ class VoiceWakeService : Service() {
 
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
             != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            UltronSettings.save(this, "voice_status", "MICROPHONE PERMISSION DENIED")
             UltronSettings.save(this, "voice_enabled", "false")
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -179,7 +183,9 @@ class VoiceWakeService : Service() {
         if (!active) return
 
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            updateNotification("Speech recognition unavailable")
+            UltronSettings.save(this, "voice_status", "SPEECH RECOGNITION UNAVAILABLE — RETRYING")
+            updateNotification("Speech recognition unavailable — retrying")
+            restartListening(3000)
             return
         }
 
@@ -193,6 +199,7 @@ class VoiceWakeService : Service() {
                 object : RecognitionListener {
 
                     override fun onReadyForSpeech(params: Bundle?) {
+                        UltronSettings.save(this@VoiceWakeService, "voice_status", "LISTENING FOR ULTRON")
                         updateNotification(
                             if (waitingForCommand) {
                                 "ULTRON activated — say your command"
@@ -202,15 +209,21 @@ class VoiceWakeService : Service() {
                         )
                     }
 
-                    override fun onBeginningOfSpeech() {}
+                    override fun onBeginningOfSpeech() {
+                        UltronSettings.save(this@VoiceWakeService, "voice_status", "HEARING YOU")
+                        updateNotification("Hearing you…")
+                    }
                     override fun onRmsChanged(rmsdB: Float) {}
                     override fun onBufferReceived(buffer: ByteArray?) {}
                     override fun onEndOfSpeech() {
-                        updateNotification("Processing...")
+                        UltronSettings.save(this@VoiceWakeService, "voice_status", "PROCESSING SPEECH")
+                        updateNotification("Processing speech…")
                     }
 
                     override fun onError(error: Int) {
-                        restartListening(1200)
+                        UltronSettings.save(this@VoiceWakeService, "voice_status", "RECONNECTING — SPEECH ERROR " + error)
+                        updateNotification("Speech error " + error + " — reconnecting")
+                        restartListening(if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 1800 else 900)
                     }
 
                     override fun onResults(results: Bundle?) {
@@ -261,8 +274,10 @@ class VoiceWakeService : Service() {
         }
 
         try {
+            UltronSettings.save(this, "voice_status", "STARTING LISTENER")
             recognizer?.startListening(intent)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            UltronSettings.save(this, "voice_status", "RECONNECTING — " + e.javaClass.simpleName)
             restartListening(1500)
         }
     }
@@ -294,6 +309,7 @@ class VoiceWakeService : Service() {
                     handleCommand(command)
                 } else {
                     waitingForCommand = true
+                    UltronSettings.save(this, "voice_status", "ULTRON ACTIVATED — SAY COMMAND")
                     updateNotification("ULTRON activated — speak now")
                 }
                 return
@@ -368,6 +384,21 @@ class VoiceWakeService : Service() {
             .replace(Regex("^(please )?(open|launch|start|run|go to)\\s+"), "")
             .replace(Regex("\\s+(please|for me)$"), "")
             .trim()
+
+        // Explicit aliases work even when Android returns a localized app label.
+        val aliasedPackage = apps[appRequest]
+        if (aliasedPackage != null) {
+            val aliasIntent = packageManager.getLaunchIntentForPackage(aliasedPackage)
+            if (aliasIntent != null) {
+                openActivity(aliasIntent)
+                updateNotification("Opening " + appRequest)
+                UltronVoice.speak(this, "Opening " + appRequest + ".")
+            } else {
+                updateNotification(appRequest + " is not installed or cannot be launched")
+                UltronVoice.speak(this, appRequest + " is not available on this phone.")
+            }
+            return
+        }
 
         if (appRequest.isBlank()) {
             updateNotification("Which app should I open?")
