@@ -296,6 +296,7 @@ class MainActivity : Activity() {
         val ask = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) ask.add(Manifest.permission.POST_NOTIFICATIONS)
         if (checkSelfPermission(Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) ask.add(Manifest.permission.READ_CALENDAR)
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) ask.add(Manifest.permission.READ_CONTACTS)
         if (ask.isNotEmpty()) requestPermissions(ask.toTypedArray(), 77)
     }
 
