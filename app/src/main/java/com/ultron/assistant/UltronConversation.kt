@@ -33,7 +33,7 @@ object UltronConversation {
         } catch (_: Exception) {
             JSONArray()
         }
-        return (0 until turns.length()).joinToString("\\n") { i ->
+        return (0 until turns.length()).joinToString("\n") { i ->
             val turn = turns.getJSONObject(i)
             "${turn.optString("role")}: ${turn.optString("text")}"
         }
