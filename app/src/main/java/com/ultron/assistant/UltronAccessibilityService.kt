@@ -92,7 +92,16 @@ class UltronAccessibilityService : AccessibilityService() {
 
         when (waStage) {
             1 -> {
-                val search = findNode(root) { node ->
+                // Prefer WhatsApp's New Chat / contact picker so this can reach
+                // contacts that do not already have an existing conversation.
+                val newChat = findNode(root) { node ->
+                    val desc = node.contentDescription?.toString()?.lowercase().orEmpty()
+                    val text = node.text?.toString()?.lowercase().orEmpty()
+                    node.isClickable && (desc.contains("new chat") || desc.contains("new conversation") ||
+                        text == "new chat" || text == "new conversation" ||
+                        node.viewIdResourceName?.contains("fab_new_chat") == true)
+                }
+                val search = newChat ?: findNode(root) { node ->
                     val desc = node.contentDescription?.toString()?.lowercase().orEmpty()
                     val text = node.text?.toString()?.lowercase().orEmpty()
                     (desc == "search" || text == "search" || desc.contains("search")) && node.isClickable
