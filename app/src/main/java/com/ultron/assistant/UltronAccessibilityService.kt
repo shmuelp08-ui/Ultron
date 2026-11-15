@@ -36,7 +36,14 @@ class UltronAccessibilityService : AccessibilityService() {
         fun openWhatsAppConversation(contact: String, message: String? = null): Boolean {
             if (contact.isBlank()) return false
             val service = instance ?: return false
-            service.beginWhatsAppFlow(contact.trim(), message?.trim()?.takeIf { it.isNotBlank() })
+            service.beginWhatsAppFlow(contact.trim(), message?.trim()?.takeIf { it.isNotBlank() }, false)
+            return true
+        }
+
+        fun openWhatsAppGroup(groupName: String): Boolean {
+            if (groupName.isBlank()) return false
+            val service = instance ?: return false
+            service.beginWhatsAppFlow(groupName.trim(), null, true)
             return true
         }
 
@@ -70,6 +77,7 @@ class UltronAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private var waContact: String? = null
     private var waMessage: String? = null
+    private var waGroupMode = false
     private var waStage = 0
     private var waRetries = 0
     private val waAdvance = Runnable { advanceWhatsAppFlow() }
@@ -137,9 +145,10 @@ class UltronAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun beginWhatsAppFlow(contact: String, message: String?) {
+    private fun beginWhatsAppFlow(contact: String, message: String?, groupMode: Boolean) {
         waContact = contact
         waMessage = message
+        waGroupMode = groupMode
         waStage = 1
         waRetries = 0
         val launch = packageManager.getLaunchIntentForPackage("com.whatsapp")
@@ -183,13 +192,15 @@ class UltronAccessibilityService : AccessibilityService() {
             1 -> {
                 // Prefer WhatsApp's New Chat / contact picker so this can reach
                 // contacts that do not already have an existing conversation.
-                val newChat = findNode(root) { node ->
+                val newChat = if (waGroupMode) null else findNode(root) { node ->
                     val desc = node.contentDescription?.toString()?.lowercase().orEmpty()
                     val text = node.text?.toString()?.lowercase().orEmpty()
                     node.isClickable && (desc.contains("new chat") || desc.contains("new conversation") ||
                         text == "new chat" || text == "new conversation" ||
                         node.viewIdResourceName?.contains("fab_new_chat") == true)
                 }
+                // Group names are searched from WhatsApp's main Chats search,
+                // not the New Chat contact picker (which often omits groups).
                 val search = newChat ?: findNode(root) { node ->
                     val desc = node.contentDescription?.toString()?.lowercase().orEmpty()
                     val text = node.text?.toString()?.lowercase().orEmpty()
@@ -345,6 +356,7 @@ class UltronAccessibilityService : AccessibilityService() {
         handler.removeCallbacks(waAdvance)
         waContact = null
         waMessage = null
+        waGroupMode = false
         waStage = 0
         waRetries = 0
     }
