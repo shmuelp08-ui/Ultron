@@ -264,7 +264,7 @@ class VoiceWakeService : Service() {
                         val retryDelay = when (error) {
                             SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 2500L
                             SpeechRecognizer.ERROR_NO_MATCH,
-                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> 900L
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> 400L
                             SpeechRecognizer.ERROR_NETWORK,
                             SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> 2500L
                             else -> 1500L
@@ -296,9 +296,9 @@ class VoiceWakeService : Service() {
                         }.filter { it.isNotBlank() }.distinct()
 
                         processSpeech(spokenOptions)
-                        // Give command handling/TTS a moment before reopening the recognizer.
-                        restartListening(1400)
-                    }
+                        // Re-arm quickly after every completed utterance. If ULTRON is
+                        // speaking, startRecognition() respects voicePauseUntil first.
+                        restartListening(500)                    }
 
                     override fun onPartialResults(partialResults: Bundle?) {
                         if (!isCurrent()) return
@@ -364,6 +364,13 @@ class VoiceWakeService : Service() {
         restartHandler.postDelayed(restartTask, delay)
     }
 
+    // Android speech recognition may render the spoken wake phrase as "ultra on"
+    // or "ultra one". Accept those close phonetic variants without triggering on
+    // the ordinary standalone word "ultra".
+    private fun findWakeWord(utterance: String): MatchResult? =
+        Regex("\\b(?:ultron|ultra[ -]+on|ultra[ -]+one|ultra[ -]+n)\\b",
+            RegexOption.IGNORE_CASE).find(utterance)
+
     private fun processSpeech(options: List<String>) {
         if (options.isEmpty()) return
 
@@ -373,8 +380,7 @@ class VoiceWakeService : Service() {
 
             val now = android.os.SystemClock.elapsedRealtime()
             if (conversationActive &&
-                now - lastConversationActivityAt > CONVERSATION_IDLE_TIMEOUT_MS &&
-                !waitingForCommand
+                now - lastConversationActivityAt > CONVERSATION_IDLE_TIMEOUT_MS
             ) {
                 conversationActive = false
                 UltronSettings.save(this, "voice_status", "WAKE WORD STANDBY")
@@ -406,9 +412,9 @@ class VoiceWakeService : Service() {
                 }
 
                 lastConversationActivityAt = now
-                val wakeIndex = utterance.lowercase(java.util.Locale.US).indexOf("ultron")
-                val command = if (wakeIndex >= 0) {
-                    utterance.substring(wakeIndex + "ultron".length).trim()
+                val wakeMatch = findWakeWord(utterance)
+                val command = if (wakeMatch != null) {
+                    utterance.substring(wakeMatch.range.last + 1).trim()
                 } else utterance
 
                 if (command.isNotBlank()) handleCommand(command)
@@ -422,12 +428,12 @@ class VoiceWakeService : Service() {
 
             // Standby mode: ignore ordinary speech until the exact wake word
             // is heard. "ULTRON" by itself opens a conversational session.
-            val wakeIndex = utterance.lowercase(java.util.Locale.US).indexOf("ultron")
-            if (wakeIndex < 0) continue
+            val wakeMatch = findWakeWord(utterance)
+            if (wakeMatch == null) continue
 
             conversationActive = true
             lastConversationActivityAt = now
-            val command = utterance.substring(wakeIndex + "ultron".length).trim()
+            val command = utterance.substring(wakeMatch.range.last + 1).trim()
             if (command.isNotBlank()) {
                 handleCommand(command)
             } else {
@@ -597,7 +603,6 @@ class VoiceWakeService : Service() {
             speakResponse("Which app should I open?")
             return
         }
-
         val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val installedApps = packageManager.queryIntentActivities(launcherIntent, 0)
 
@@ -897,8 +902,7 @@ class VoiceWakeService : Service() {
             }
             val pending = PendingIntent.getActivity(
                 this, 7401, resumeIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE            )
             val notice = Notification.Builder(this, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle("Unlock to continue in WhatsApp")
