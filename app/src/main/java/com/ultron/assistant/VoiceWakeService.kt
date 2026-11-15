@@ -699,29 +699,14 @@ class VoiceWakeService : Service() {
         if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return null
         val wanted = normalizeCommand(contact)
         if (wanted.isBlank()) return null
-        val matches = mutableListOf<Pair<String, String>>()
-        try {
-            contentResolver.query(
-                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                arrayOf(
-                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-                    ContactsContract.CommonDataKinds.Phone.NUMBER,
-                    ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER
-                ),
-                null, null, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " COLLATE NOCASE ASC"
-            )?.use { cursor ->
-                val nameCol = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-                val numberCol = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                val normalizedCol = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER)
-                while (cursor.moveToNext()) {
-                    val name = if (nameCol >= 0) cursor.getString(nameCol).orEmpty() else ""
-                    val rawNumber = if (numberCol >= 0) cursor.getString(numberCol).orEmpty() else ""
-                    val normalizedNumber = if (normalizedCol >= 0) cursor.getString(normalizedCol).orEmpty() else ""
-                    val number = normalizeWhatsAppNumber(rawNumber, normalizedNumber) ?: continue
-                    if (contactMatchScore(wanted, name) >= 65) matches.add(name to number)
-                }
-            }
-        } catch (_: SecurityException) { return null }
+
+        // ContactVault reads the full on-device address book and maintains an
+        // AES-GCM encrypted snapshot using a non-exportable Android Keystore key.
+        // Names/numbers never go to Groq or into the GitHub source tree.
+        val matches = ContactVault.load(this).mapNotNull { entry ->
+            val number = normalizeWhatsAppNumber(entry.number, "") ?: return@mapNotNull null
+            if (contactMatchScore(wanted, entry.name) >= 65) entry.name to number else null
+        }
 
         val ranked = matches.distinctBy { it.second }
             .map { it to contactMatchScore(wanted, it.first) }
