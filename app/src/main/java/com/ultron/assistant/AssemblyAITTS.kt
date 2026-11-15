@@ -18,10 +18,15 @@ import java.net.URL
 object AssemblyAITTS {
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var player: MediaPlayer? = null
+    @Volatile private var requestOrPlaybackActive: Boolean = false
+
+    fun isSpeaking(): Boolean = requestOrPlaybackActive
 
     fun speak(context: Context, text: String, apiKey: String, voiceId: String) {
         if (text.isBlank()) return
+        requestOrPlaybackActive = true
         if (apiKey.isBlank() || voiceId.isBlank()) {
+            requestOrPlaybackActive = false
             main.post { Toast.makeText(context, "Add your AssemblyAI API key and cloned Voice ID in Settings.", Toast.LENGTH_LONG).show() }
             return
         }
@@ -66,8 +71,18 @@ object AssemblyAITTS {
                                 .build())
                             setDataSource(file.absolutePath)
                             setOnPreparedListener { it.start() }
-                            setOnCompletionListener { mp -> mp.release(); if (player === mp) player = null }
-                            setOnErrorListener { mp, _, _ -> mp.release(); if (player === mp) player = null; Toast.makeText(context, "ULTRON couldn't play the cloned voice audio.", Toast.LENGTH_LONG).show(); true }
+                            setOnCompletionListener { mp ->
+                                mp.release()
+                                if (player === mp) player = null
+                                requestOrPlaybackActive = false
+                            }
+                            setOnErrorListener { mp, _, _ ->
+                                mp.release()
+                                if (player === mp) player = null
+                                requestOrPlaybackActive = false
+                                Toast.makeText(context, "ULTRON couldn't play the cloned voice audio.", Toast.LENGTH_LONG).show()
+                                true
+                            }
                             prepareAsync()
                         }
                     } catch (e: Exception) {
@@ -75,6 +90,7 @@ object AssemblyAITTS {
                     }
                 }
             } catch (e: Exception) {
+                requestOrPlaybackActive = false
                 main.post {
                     Toast.makeText(context, "AssemblyAI cloned voice failed: ${e.localizedMessage ?: "Check API key and voice ID."}", Toast.LENGTH_LONG).show()
                 }
@@ -85,6 +101,7 @@ object AssemblyAITTS {
     }
 
     fun stop() {
+        requestOrPlaybackActive = false
         main.post {
             player?.let { try { it.stop() } catch (_: Exception) {}; it.release() }
             player = null
