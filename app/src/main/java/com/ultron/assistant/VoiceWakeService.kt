@@ -258,12 +258,12 @@ class VoiceWakeService : Service() {
                         UltronSettings.save(this@VoiceWakeService, "voice_status", "RECONNECTING — SPEECH ERROR " + error)
                         updateNotification("Speech error " + error + " — reconnecting")
                         val retryDelay = when (error) {
-                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 1800L
+                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 2500L
                             SpeechRecognizer.ERROR_NO_MATCH,
-                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> 500L
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> 900L
                             SpeechRecognizer.ERROR_NETWORK,
-                            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> 2200L
-                            else -> 1100L
+                            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> 2500L
+                            else -> 1500L
                         }
                         restartListening(retryDelay)
                     }
@@ -275,14 +275,21 @@ class VoiceWakeService : Service() {
                             ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                             ?.map { it.trim().lowercase() }
                             ?: emptyList()
-                        val partial = partialTranscript.trim()
+                        val confidence = results?.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)
+                        val rankedFinal = finalOptions.withIndex()
+                            .sortedByDescending { confidence?.getOrNull(it.index) ?: -1f }
+                            .map { it.value }
+                        val partial = partialTranscript.trim().lowercase()
                         partialTranscript = ""
-                        // Keep the longest useful hypothesis. Android sometimes emits
-                        // a truncated final result after a complete partial transcript.
-                        val spokenOptions = (finalOptions + listOf(partial))
-                            .filter { it.isNotBlank() }
-                            .distinct()
-                            .sortedByDescending { it.length }
+                        // Prefer Android's confidence-ranked final hypotheses. Use the
+                        // partial transcript as a recovery candidate when the final result
+                        // is missing or appears materially truncated.
+                        val spokenOptions = buildList {
+                            addAll(rankedFinal)
+                            if (partial.isNotBlank() &&
+                                (rankedFinal.isEmpty() || partial.length > rankedFinal.first().length + 8)
+                            ) add(partial)
+                        }.filter { it.isNotBlank() }.distinct()
 
                         processSpeech(spokenOptions)
                         // Give command handling/TTS a moment before reopening the recognizer.
