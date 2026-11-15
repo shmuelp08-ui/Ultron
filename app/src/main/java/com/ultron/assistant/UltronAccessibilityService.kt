@@ -40,10 +40,10 @@ class UltronAccessibilityService : AccessibilityService() {
             return true
         }
 
-        fun openWhatsAppGroup(groupName: String): Boolean {
+        fun openWhatsAppGroup(groupName: String, message: String? = null): Boolean {
             if (groupName.isBlank()) return false
             val service = instance ?: return false
-            service.beginWhatsAppFlow(groupName.trim(), null, true)
+            service.beginWhatsAppFlow(groupName.trim(), message?.trim()?.takeIf { it.isNotBlank() }, true)
             return true
         }
 
@@ -229,13 +229,23 @@ class UltronAccessibilityService : AccessibilityService() {
             3 -> {
                 val target = waContact.orEmpty()
                 val candidates = findNodes(root) { node ->
-                    node.isVisibleToUser && node.text?.toString()?.isNotBlank() == true
+                    node.isVisibleToUser && (
+                        !node.text?.toString().isNullOrBlank() ||
+                        !node.contentDescription?.toString().isNullOrBlank()
+                    )
                 }.mapNotNull { node ->
-                    val label = node.text?.toString()?.trim().orEmpty()
-                    val score = contactLabelScore(target, label)
+                    val textLabel = node.text?.toString()?.trim().orEmpty()
+                    val description = node.contentDescription?.toString()?.trim().orEmpty()
+                    val textScore = contactLabelScore(target, textLabel)
+                    val descriptionScore = contactLabelScore(target, description)
+                    val score = maxOf(textScore, descriptionScore)
                     if (score >= 65) node to score else null
-                }.distinctBy { normalizeContactLabel(it.first.text?.toString().orEmpty()) }
-                    .sortedByDescending { it.second }
+                }.distinctBy {
+                    normalizeContactLabel(
+                        it.first.text?.toString()?.takeIf { value -> value.isNotBlank() }
+                            ?: it.first.contentDescription?.toString().orEmpty()
+                    )
+                }.sortedByDescending { it.second }
 
                 val best = candidates.firstOrNull()
                 val second = candidates.getOrNull(1)
