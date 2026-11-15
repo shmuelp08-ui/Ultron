@@ -223,7 +223,8 @@ class UltronAccessibilityService : AccessibilityService() {
                     val label = node.text?.toString()?.trim().orEmpty()
                     val score = contactLabelScore(target, label)
                     if (score >= 65) node to score else null
-                }.sortedByDescending { it.second }
+                }.distinctBy { normalizeContactLabel(it.first.text?.toString().orEmpty()) }
+                    .sortedByDescending { it.second }
 
                 val best = candidates.firstOrNull()
                 val second = candidates.getOrNull(1)
@@ -271,13 +272,14 @@ class UltronAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun normalizeContactLabel(value: String): String = value.lowercase()
+        .replace(Regex("[^\\p{L}\\p{N} ]"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
     private fun contactLabelScore(spokenName: String, visibleLabel: String): Int {
-        fun normalize(value: String): String = value.lowercase()
-            .replace(Regex("[^\\p{L}\\p{N} ]"), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-        val wanted = normalize(spokenName).split(" ").filter { it.isNotBlank() }.toSet()
-        val shown = normalize(visibleLabel).split(" ").filter { it.isNotBlank() }.toSet()
+        val wanted = normalizeContactLabel(spokenName).split(" ").filter { it.isNotBlank() }.toSet()
+        val shown = normalizeContactLabel(visibleLabel).split(" ").filter { it.isNotBlank() }.toSet()
         if (wanted.isEmpty() || shown.isEmpty()) return 0
         val w = wanted.joinToString(" ")
         val s = shown.joinToString(" ")
