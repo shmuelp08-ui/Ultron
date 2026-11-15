@@ -38,6 +38,10 @@ class VoiceWakeService : Service() {
     @Volatile private var partialTranscript = ""
     private var launchQueuedForUnlock = false
     @Volatile private var voicePauseUntil = 0L
+    // Remember the exact phrase ULTRON just spoke so speech-recognition echo
+    // cannot be mistaken for a fresh user command (for example, "WhatsApp").
+    @Volatile private var lastAssistantSpeech = ""
+    @Volatile private var lastAssistantSpeechAt = 0L
     private var wakeLock: PowerManager.WakeLock? = null
     // Service Context is not attached during construction; initialize Handler in onCreate.
     private lateinit var restartHandler: android.os.Handler
@@ -372,12 +376,28 @@ class VoiceWakeService : Service() {
         Regex("\\b(?:ultron|ultra[ -]+on|ultra[ -]+one|ultra[ -]+n)\\b",
             RegexOption.IGNORE_CASE).find(utterance)
 
+    private fun isRecentAssistantEcho(utterance: String): Boolean {
+        val age = android.os.SystemClock.elapsedRealtime() - lastAssistantSpeechAt
+        if (age < 0L || age > 30_000L) return false
+        val heard = normalizeCommand(utterance)
+        val spoken = lastAssistantSpeech
+        if (heard.length < 4 || spoken.isBlank()) return false
+        // Only discard a recognized phrase when it appears verbatim inside
+        // the immediately preceding assistant response. This catches clipped
+        // echo such as "WhatsApp" from "Opening WhatsApp." without blocking
+        // unrelated user commands.
+        return spoken.contains(heard)
+    }
+
     private fun processSpeech(options: List<String>) {
         if (options.isEmpty()) return
 
         for (spoken in options) {
             val utterance = spoken.trim()
             if (utterance.isBlank()) continue
+            // Some recognizers return the tail end of ULTRON's TTS as a short
+            // transcript. Drop phrases contained in ULTRON's recent reply.
+            if (isRecentAssistantEcho(utterance)) continue
 
             val now = android.os.SystemClock.elapsedRealtime()
             if (conversationActive &&
@@ -1059,8 +1079,12 @@ class VoiceWakeService : Service() {
     // Prevent the recognizer from hearing ULTRON's own spoken reply as a new command.
     private fun speakResponse(text: String) {
         if (text.isNotBlank()) UltronConversation.addTurn(this, "ULTRON", text)
+        lastAssistantSpeech = normalizeCommand(text)
+        lastAssistantSpeechAt = android.os.SystemClock.elapsedRealtime()
+        // Keep the recognizer stopped through normal playback; the echo guard
+        // above remains active as a second layer if network TTS starts late.
         voicePauseUntil = android.os.SystemClock.elapsedRealtime() +
-            maxOf(2500L, text.length * 85L)
+            maxOf(4000L, text.length * 140L)
         UltronVoice.speak(this, text)
     }
 
