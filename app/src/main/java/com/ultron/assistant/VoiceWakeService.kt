@@ -298,7 +298,8 @@ class VoiceWakeService : Service() {
                         processSpeech(spokenOptions)
                         // Re-arm quickly after every completed utterance. If ULTRON is
                         // speaking, startRecognition() respects voicePauseUntil first.
-                        restartListening(500)                    }
+                        restartListening(500)
+                    }
 
                     override fun onPartialResults(partialResults: Bundle?) {
                         if (!isCurrent()) return
@@ -902,7 +903,8 @@ class VoiceWakeService : Service() {
             }
             val pending = PendingIntent.getActivity(
                 this, 7401, resumeIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE            )
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
             val notice = Notification.Builder(this, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle("Unlock to continue in WhatsApp")
