@@ -679,8 +679,8 @@ class VoiceWakeService : Service() {
         }
 
         // Gemini is the primary reasoning engine; the saved Groq key is the automatic backup.
-        val geminiKey = UltronSettings.get(this, "gemini_api_key").orEmpty()
-        val groqKey = UltronSettings.get(this, "openai_api_key").orEmpty()
+        val geminiKey = UltronSettings.getSecret(this, "gemini_api_key").orEmpty()
+        val groqKey = UltronSettings.getSecret(this, "openai_api_key").orEmpty()
         if (geminiKey.isBlank() && groqKey.isBlank()) {
             updateNotification("Gemini API key needed — open ULTRON app")
             speakResponse("First add your Gemini API key in ULTRON settings. Your Groq key can be added as a backup.")
