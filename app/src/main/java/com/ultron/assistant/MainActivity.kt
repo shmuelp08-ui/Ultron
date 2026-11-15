@@ -613,8 +613,8 @@ class MainActivity : Activity() {
     private fun sendToAI() {
         val question = chatInput.text.toString().trim()
         if (question.isBlank() || chatBusy) return
-        val geminiKey = UltronSettings.get(this, "gemini_api_key").orEmpty()
-        val groqKey = UltronSettings.get(this, "openai_api_key").orEmpty()
+        val geminiKey = UltronSettings.getSecret(this, "gemini_api_key").orEmpty()
+        val groqKey = UltronSettings.getSecret(this, "openai_api_key").orEmpty()
         if (geminiKey.isBlank() && groqKey.isBlank()) {
             chatLog.text = "Add your Gemini API key in SETTINGS. Your existing Groq key can be saved as backup."
             return
@@ -658,7 +658,7 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this).setTitle(title).setView(field)
             .setPositiveButton("SAVE") { _, _ ->
                 val value = field.text.toString().trim()
-                if (value.isNotBlank()) UltronSettings.save(this, key, value)
+                if (value.isNotBlank()) if (key.endsWith("_api_key")) UltronSettings.saveSecret(this, key, value) else UltronSettings.save(this, key, value)
             }.setNegativeButton("CANCEL", null).show()
     }
 
@@ -698,7 +698,7 @@ class MainActivity : Activity() {
             setTextColor(Color.WHITE)
             setHintTextColor(Color.GRAY)
             inputType = 129
-            setText(UltronSettings.get(this@MainActivity, "assemblyai_api_key") ?: "")
+            setText(UltronSettings.getSecret(this@MainActivity, "assemblyai_api_key") ?: "")
         }
         fields.addView(apiKeyField, buttonParams())
         val voiceIdField = EditText(this).apply {
@@ -716,7 +716,7 @@ class MainActivity : Activity() {
                 if (key.isBlank() || id.isBlank()) {
                     statusTextOrToast("Both the AssemblyAI API key and cloned voice ID are required.")
                 } else {
-                    UltronSettings.save(this, "assemblyai_api_key", key)
+                    UltronSettings.saveSecret(this, "assemblyai_api_key", key)
                     UltronSettings.save(this, "assemblyai_voice_id", id)
                     UltronVoice.speak(this, "ULTRON voice system activated. This reply is being generated with your AssemblyAI cloned voice.")
                     showFeature("CLONED VOICE ACTIVATED", "AssemblyAI is now selected for ULTRON speech. If the API key or voice ID is invalid, ULTRON will show an error instead of silently switching to the Android voice.")
