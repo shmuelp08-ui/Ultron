@@ -31,6 +31,7 @@ class VoiceWakeService : Service() {
     private var recognitionGeneration = 0
     private var active = false
     private var waitingForCommand = false
+    @Volatile private var partialTranscript = ""
     private var launchQueuedForUnlock = false
     @Volatile private var voicePauseUntil = 0L
     private var wakeLock: PowerManager.WakeLock? = null
@@ -220,6 +221,7 @@ class VoiceWakeService : Service() {
             val currentRecognizer = SpeechRecognizer.createSpeechRecognizer(applicationContext)
             recognizer = currentRecognizer
 
+            partialTranscript = ""
             currentRecognizer.setRecognitionListener(
                 object : RecognitionListener {
                     private fun isCurrent(): Boolean =
@@ -269,21 +271,36 @@ class VoiceWakeService : Service() {
                     override fun onResults(results: Bundle?) {
                         if (!isCurrent()) return
 
-                        val spokenOptions = results
-                            ?.getStringArrayList(
-                                SpeechRecognizer.RESULTS_RECOGNITION
-                            )
+                        val finalOptions = results
+                            ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                             ?.map { it.trim().lowercase() }
                             ?: emptyList()
+                        val partial = partialTranscript.trim()
+                        partialTranscript = ""
+                        // Keep the longest useful hypothesis. Android sometimes emits
+                        // a truncated final result after a complete partial transcript.
+                        val spokenOptions = (finalOptions + listOf(partial))
+                            .filter { it.isNotBlank() }
+                            .distinct()
+                            .sortedByDescending { it.length }
 
                         processSpeech(spokenOptions)
                         // Give command handling/TTS a moment before reopening the recognizer.
                         restartListening(1400)
                     }
 
-                    override fun onPartialResults(
-                        partialResults: Bundle?
-                    ) {}
+                    override fun onPartialResults(partialResults: Bundle?) {
+                        if (!isCurrent()) return
+                        val candidates = partialResults
+                            ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                            .orEmpty()
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                        val best = candidates.maxByOrNull { it.length }
+                        if (best != null && best.length >= partialTranscript.length) {
+                            partialTranscript = best
+                        }
+                    }
 
                     override fun onEvent(
                         eventType: Int,
@@ -315,8 +332,9 @@ class VoiceWakeService : Service() {
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-US")
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 900L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 650L)
+            // Give names and longer natural-language commands enough time to finish.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1800L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
         }
 
         try {
@@ -624,6 +642,21 @@ class VoiceWakeService : Service() {
         return false
     }
 
+    private fun contactMatchScore(spokenName: String, savedName: String): Int {
+        val wanted = normalizeCommand(spokenName).split(" ").filter { it.isNotBlank() }.toSet()
+        val candidate = normalizeCommand(savedName).split(" ").filter { it.isNotBlank() }.toSet()
+        if (wanted.isEmpty() || candidate.isEmpty()) return 0
+        val w = wanted.joinToString(" ")
+        val c = candidate.joinToString(" ")
+        if (w == c) return 100
+        if (c.startsWith(w) || w.startsWith(c)) return 88
+        if (c.contains(w) || w.contains(c)) return 84
+        val overlap = wanted.intersect(candidate).size
+        if (overlap == wanted.size) return 80
+        if (overlap > 0 && overlap.toFloat() / wanted.size >= 0.75f) return 65
+        return 0
+    }
+
     private fun resolveWhatsAppNumber(contact: String): String? {
         if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return null
         val wanted = normalizeCommand(contact)
@@ -640,18 +673,20 @@ class VoiceWakeService : Service() {
                 while (cursor.moveToNext()) {
                     val name = if (nameCol >= 0) cursor.getString(nameCol).orEmpty() else ""
                     val number = if (numberCol >= 0) cursor.getString(numberCol).orEmpty() else ""
-                    val normalized = normalizeCommand(name)
-                    if (normalized == wanted || normalized.startsWith("$wanted ") || wanted.startsWith("$normalized ")) {
-                        val digits = number.filter { it.isDigit() }
-                        if (digits.length >= 7) matches.add(name to digits)
+                    val digits = number.filter { it.isDigit() }
+                    if (digits.length >= 7 && contactMatchScore(wanted, name) >= 65) {
+                        matches.add(name to digits)
                     }
                 }
             }
         } catch (_: SecurityException) { return null }
-        val exact = matches.filter { normalizeCommand(it.first) == wanted }.distinctBy { it.second }
-        if (exact.size == 1) return exact.first().second
-        if (exact.size > 1) return null
-        return matches.distinctBy { it.second }.singleOrNull()?.second
+        val ranked = matches.distinctBy { it.second }
+            .map { it to contactMatchScore(wanted, it.first) }
+            .sortedByDescending { it.second }
+        val best = ranked.firstOrNull() ?: return null
+        // Never guess when two different phone numbers are equally plausible.
+        if (ranked.size > 1 && best.second - ranked[1].second < 8) return null
+        return best.first.second
     }
 
     private fun openWhatsAppDeepLink(contact: String, message: String?): Boolean {
