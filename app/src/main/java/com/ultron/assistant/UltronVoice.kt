@@ -50,6 +50,15 @@ object UltronVoice {
         } else pending.addLast(text)
     }
 
+    /**
+     * True while ULTRON audio is queued or playing. The microphone service uses
+     * this gate to avoid transcribing the assistant's own voice as user input.
+     */
+    @Synchronized
+    fun isSpeaking(): Boolean {
+        return pending.isNotEmpty() || (engine?.isSpeaking == true) || AssemblyAITTS.isSpeaking()
+    }
+
     @Synchronized
     fun speakSystemFallback(context: Context, text: String) {
         speakAndroid(context, text)
