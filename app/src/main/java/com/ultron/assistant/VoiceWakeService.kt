@@ -275,7 +275,7 @@ class VoiceWakeService : Service() {
                             ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                             ?.map { it.trim().lowercase() }
                             ?: emptyList()
-                        val confidence = results?.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)
+                        val confidence = results?.getFloatArray(RecognizerIntent.EXTRA_CONFIDENCE_SCORES)
                         val rankedFinal = finalOptions.withIndex()
                             .sortedByDescending { confidence?.getOrNull(it.index) ?: -1f }
                             .map { it.value }
