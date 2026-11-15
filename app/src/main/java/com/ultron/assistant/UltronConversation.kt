@@ -21,7 +21,7 @@ object UltronConversation {
         // Avoid duplicate adjacent turns when replies are recorded by more than one layer.
         if (turns.length() > 0) {
             val last = turns.optJSONObject(turns.length() - 1)
-            if (last?.optString("role") == role && last.optString("text") == text) return
+            if (last != null && last.optString("role") == role && last.optString("text") == text) return
         }
         turns.put(JSONObject().put("role", role).put("text", text))
         val trimmed = JSONArray()
