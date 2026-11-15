@@ -230,12 +230,12 @@ class VoiceWakeService : Service() {
 
                     override fun onReadyForSpeech(params: Bundle?) {
                         if (!isCurrent()) return
-                        UltronSettings.save(this@VoiceWakeService, "voice_status", "LISTENING FOR ULTRON")
+                        UltronSettings.save(this@VoiceWakeService, "voice_status", "CONTINUOUS LISTENING")
                         updateNotification(
                             if (waitingForCommand) {
                                 "ULTRON activated — say your command"
                             } else {
-                                "Listening for ULTRON..."
+                                "Listening continuously — speak naturally"
                             }
                         )
                     }
