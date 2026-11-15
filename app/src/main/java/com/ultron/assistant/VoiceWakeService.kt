@@ -678,11 +678,12 @@ class VoiceWakeService : Service() {
             return
         }
 
-        // If it is not an app-launch request, treat it as a natural AI question.
-        val apiKey = UltronSettings.get(this, "openai_api_key")
-        if (apiKey.isNullOrBlank()) {
-            updateNotification("AI key needed — open ULTRON app")
-            speakResponse("I can answer that, but first add your Groq API key in the ULTRON app.")
+        // Gemini is the primary reasoning engine; the saved Groq key is the automatic backup.
+        val geminiKey = UltronSettings.get(this, "gemini_api_key").orEmpty()
+        val groqKey = UltronSettings.get(this, "openai_api_key").orEmpty()
+        if (geminiKey.isBlank() && groqKey.isBlank()) {
+            updateNotification("Gemini API key needed — open ULTRON app")
+            speakResponse("First add your Gemini API key in ULTRON settings. Your Groq key can be added as a backup.")
             return
         }
 
@@ -693,7 +694,8 @@ class VoiceWakeService : Service() {
         updateNotification("ULTRON is thinking...")
         Thread {
             val answer = AIController.ask(
-                apiKey,
+                geminiKey,
+                groqKey,
                 command,
                 UltronMemory.recall(this),
                 recentConversation
