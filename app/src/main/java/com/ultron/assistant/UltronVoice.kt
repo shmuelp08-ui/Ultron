@@ -16,7 +16,7 @@ object UltronVoice {
     @Synchronized
     fun speak(context: Context, text: String) {
         if (text.isBlank()) return
-        val key = UltronSettings.get(context, "assemblyai_api_key")
+        val key = UltronSettings.getSecret(context, "assemblyai_api_key")
         val voiceId = UltronSettings.get(context, "assemblyai_voice_id")
         if (!key.isNullOrBlank() && !voiceId.isNullOrBlank()) {
             AssemblyAITTS.speak(context, text, key, voiceId)
