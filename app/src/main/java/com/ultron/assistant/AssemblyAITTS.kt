@@ -86,6 +86,7 @@ object AssemblyAITTS {
                             prepareAsync()
                         }
                     } catch (e: Exception) {
+                        requestOrPlaybackActive = false
                         Toast.makeText(context, "Cloned voice playback failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                     }
                 }
