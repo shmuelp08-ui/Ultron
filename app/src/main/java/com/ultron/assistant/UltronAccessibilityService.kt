@@ -211,25 +211,32 @@ class UltronAccessibilityService : AccessibilityService() {
                     if (field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
                         waStage = 3
                         waRetries = 0
-                        retryWhatsApp(1100)
+                        retryWhatsApp(1500)
                     } else retryWhatsApp()
                 } else retryWhatsApp()
             }
             3 -> {
-                val target = waContact?.lowercase().orEmpty()
-                val match = findNode(root) { node ->
-                    val value = node.text?.toString()?.trim()?.lowercase().orEmpty()
-                    value == target || (value.length > target.length && value.startsWith(target))
-                }
-                if (match != null) {
-                    val clickable = clickableAncestor(match)
+                val target = waContact.orEmpty()
+                val candidates = findNodes(root) { node ->
+                    node.isVisibleToUser && node.text?.toString()?.isNotBlank() == true
+                }.mapNotNull { node ->
+                    val label = node.text?.toString()?.trim().orEmpty()
+                    val score = contactLabelScore(target, label)
+                    if (score >= 65) node to score else null
+                }.sortedByDescending { it.second }
+
+                val best = candidates.firstOrNull()
+                val second = candidates.getOrNull(1)
+                // Avoid opening the wrong person when two visible rows are similarly named.
+                if (best != null && (second == null || best.second - second.second >= 8)) {
+                    val clickable = clickableAncestor(best.first)
                     if (clickable?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) {
                         waStage = if (waMessage == null) 0 else 4
                         waRetries = 0
                         if (waStage == 4) retryWhatsApp(900)
                         else clearWhatsAppFlow()
                     } else retryWhatsApp()
-                } else retryWhatsApp()
+                } else retryWhatsApp(650)
             }
             4 -> {
                 val fields = findNodes(root) { it.className?.toString()?.contains("EditText") == true && it.isVisibleToUser }
@@ -262,6 +269,25 @@ class UltronAccessibilityService : AccessibilityService() {
                 } else retryWhatsApp(500)
             }
         }
+    }
+
+    private fun contactLabelScore(spokenName: String, visibleLabel: String): Int {
+        fun normalize(value: String): String = value.lowercase()
+            .replace(Regex("[^\\p{L}\\p{N} ]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        val wanted = normalize(spokenName).split(" ").filter { it.isNotBlank() }.toSet()
+        val shown = normalize(visibleLabel).split(" ").filter { it.isNotBlank() }.toSet()
+        if (wanted.isEmpty() || shown.isEmpty()) return 0
+        val w = wanted.joinToString(" ")
+        val s = shown.joinToString(" ")
+        if (w == s) return 100
+        if (s.startsWith(w) || w.startsWith(s)) return 88
+        if (s.contains(w) || w.contains(s)) return 84
+        val overlap = wanted.intersect(shown).size
+        if (overlap == wanted.size) return 80
+        if (overlap > 0 && overlap.toFloat() / wanted.size >= 0.75f) return 65
+        return 0
     }
 
     private fun retryWhatsApp(delay: Long = 350L) {
