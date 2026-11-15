@@ -272,10 +272,20 @@ class UltronAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun normalizeContactLabel(value: String): String = value.lowercase()
+    private fun normalizeContactLabel(value: String): String = value.lowercase(java.util.Locale.US)
         .replace(Regex("[^\\p{L}\\p{N} ]"), " ")
         .replace(Regex("\\s+"), " ")
         .trim()
+        // Keep speech-recognition variants equivalent to the names in Contacts.
+        .replace(Regex("\\bmomma\\b"), "mama")
+        .replace(Regex("\\bmamma\\b"), "mama")
+        .replace(Regex("\\bmommy\\b"), "mama")
+        .replace(Regex("\\bmother\\b"), "mama")
+        .replace(Regex("\\bpoppa\\b"), "papa")
+        .replace(Regex("\\bpappa\\b"), "papa")
+        .replace(Regex("\\bpapi\\b"), "papa")
+        .replace(Regex("\\bdaddy\\b"), "papa")
+        .replace(Regex("\\bfather\\b"), "papa")
 
     private fun contactLabelScore(spokenName: String, visibleLabel: String): Int {
         val wanted = normalizeContactLabel(spokenName).split(" ").filter { it.isNotBlank() }.toSet()
