@@ -23,6 +23,8 @@ class VoiceWakeService : Service() {
         const val ACTION_STOP = "com.ultron.assistant.STOP_VOICE"
         private const val CHANNEL_ID = "ultron_voice_channel"
         private const val NOTIFICATION_ID = 404
+        // After the wake word, keep the conversation open until 60 seconds of silence.
+        private const val CONVERSATION_IDLE_TIMEOUT_MS = 60_000L
         // User-provided Philadelphia, PA WhatsApp destination (E.164 digits).
         private const val WHATSAPP_NUMBER = "12154320383"
     }
@@ -31,6 +33,8 @@ class VoiceWakeService : Service() {
     private var recognitionGeneration = 0
     private var active = false
     private var waitingForCommand = false
+    private var conversationActive = false
+    private var lastConversationActivityAt = 0L
     @Volatile private var partialTranscript = ""
     private var launchQueuedForUnlock = false
     @Volatile private var voicePauseUntil = 0L
@@ -363,26 +367,67 @@ class VoiceWakeService : Service() {
     private fun processSpeech(options: List<String>) {
         if (options.isEmpty()) return
 
-        // Voice listening is explicitly enabled by the user from ULTRON.
-        // Keep a continuous conversation while that foreground microphone service
-        // is active; the wake word remains optional rather than mandatory.
         for (spoken in options) {
             val utterance = spoken.trim()
             if (utterance.isBlank()) continue
 
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (conversationActive &&
+                now - lastConversationActivityAt > CONVERSATION_IDLE_TIMEOUT_MS &&
+                !waitingForCommand
+            ) {
+                conversationActive = false
+                UltronSettings.save(this, "voice_status", "WAKE WORD STANDBY")
+                updateNotification("Say ULTRON to start a conversation")
+            }
+
+            // Once ULTRON has been called, keep accepting natural follow-ups
+            // without another wake word. The session closes after 60 seconds
+            // without a user utterance, then ULTRON is required again.
             if (waitingForCommand) {
                 waitingForCommand = false
+                conversationActive = true
+                lastConversationActivityAt = now
                 handleCommand(utterance)
                 return
             }
 
-            val wakeIndex = utterance.lowercase(java.util.Locale.US).indexOf("ultron")
-            val command = if (wakeIndex >= 0) {
-                utterance.substring(wakeIndex + "ultron".length).trim()
-            } else {
-                utterance
+            if (conversationActive) {
+                val endSession = utterance.lowercase(java.util.Locale.US)
+                    .replace(Regex("[^a-z ]"), " ")
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
+                if (endSession in listOf("goodbye", "end conversation", "close conversation", "stop conversation", "go to sleep")) {
+                    conversationActive = false
+                    waitingForCommand = false
+                    UltronSettings.save(this, "voice_status", "WAKE WORD STANDBY")
+                    updateNotification("Conversation ended — say ULTRON when you need me")
+                    return
+                }
+
+                lastConversationActivityAt = now
+                val wakeIndex = utterance.lowercase(java.util.Locale.US).indexOf("ultron")
+                val command = if (wakeIndex >= 0) {
+                    utterance.substring(wakeIndex + "ultron".length).trim()
+                } else utterance
+
+                if (command.isNotBlank()) handleCommand(command)
+                else {
+                    waitingForCommand = true
+                    UltronSettings.save(this, "voice_status", "ULTRON ACTIVATED — SAY COMMAND")
+                    updateNotification("I'm listening — go ahead")
+                }
+                return
             }
 
+            // Standby mode: ignore ordinary speech until the exact wake word
+            // is heard. "ULTRON" by itself opens a conversational session.
+            val wakeIndex = utterance.lowercase(java.util.Locale.US).indexOf("ultron")
+            if (wakeIndex < 0) continue
+
+            conversationActive = true
+            lastConversationActivityAt = now
+            val command = utterance.substring(wakeIndex + "ultron".length).trim()
             if (command.isNotBlank()) {
                 handleCommand(command)
             } else {
