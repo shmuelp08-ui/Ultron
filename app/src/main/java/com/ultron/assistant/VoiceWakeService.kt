@@ -387,15 +387,8 @@ class VoiceWakeService : Service() {
             .replace(Regex("\\s+"), " ")
             .trim()
             // Common family-name pronunciation variants produced by speech recognition.
-            .replace(Regex("\\bmomma\\b"), "mama")
-            .replace(Regex("\\bmamma\\b"), "mama")
-            .replace(Regex("\\bmommy\\b"), "mama")
-            .replace(Regex("\\bmother\\b"), "mama")
-            .replace(Regex("\\bpoppa\\b"), "papa")
-            .replace(Regex("\\bpappa\\b"), "papa")
-            .replace(Regex("\\bpapi\\b"), "papa")
-            .replace(Regex("\\bdaddy\\b"), "papa")
-            .replace(Regex("\\bfather\\b"), "papa")
+            .replace(Regex("\\b(mom|momma|mamma|mommy|mum|mother|ma)\\b"), "mama")
+            .replace(Regex("\\b(dad|daddy|father|poppa|pappa|pops|pop|papi|pa)\\b"), "papa")
     }
 
     private fun handleCommand(command: String) {
@@ -465,6 +458,9 @@ class VoiceWakeService : Service() {
 
         // WhatsApp contact navigation is driven through the user-enabled Accessibility bridge.
         if (handleWhatsAppCommand(spoken)) return
+        // Allow natural commands such as "open Mama" or "find Papa" to resolve
+        // against the phone's real contacts before treating them as app names.
+        if (handleDirectContactCommand(spoken)) return
 
         // Phone-wide navigation is available only after the user enables ULTRON Accessibility.
         val globalAction = when {
@@ -605,6 +601,22 @@ class VoiceWakeService : Service() {
         }.start()
     }
 
+    private fun handleDirectContactCommand(command: String): Boolean {
+        val match = Regex("^(?:please )?(?:open|launch|go to|find|show me|show) (?:my )?(.+)$")
+            .find(command) ?: return false
+        val contact = match.groupValues[1]
+            .replace(Regex("\\s+(?:whatsapp )?(?:chat|conversation)$"), "")
+            .removeSuffix(" whatsapp")
+            .removeSuffix("'s")
+            .trim()
+        if (contact.isBlank()) return false
+
+        // Only intercept the command when a real contact match exists. This
+        // leaves ordinary app launching and general questions untouched.
+        if (resolveWhatsAppNumber(contact) == null) return false
+        return openWhatsAppContact(contact, null)
+    }
+
     private fun handleWhatsAppCommand(command: String): Boolean {
         val contactAndMessage = listOf(
             Regex("^(?:send|text|message) (.+?) to (.+?) on whatsapp$"),
@@ -667,6 +679,22 @@ class VoiceWakeService : Service() {
         return 0
     }
 
+    private fun normalizeWhatsAppNumber(rawNumber: String, normalizedNumber: String): String? {
+        val source = normalizedNumber.trim().takeIf { it.startsWith("+") } ?: rawNumber.trim()
+        val digits = source.filter { it.isDigit() }
+        if (digits.length !in 7..15) return null
+        if (source.startsWith("+")) return digits
+
+        // Contacts exported from the US often omit +1; Israeli local mobile
+        // numbers often begin with 05. Convert those common local formats.
+        return when {
+            digits.length == 10 && digits.startsWith("05") -> "972" + digits.drop(1)
+            digits.length == 10 -> "1" + digits
+            digits.length == 11 && digits.startsWith("1") -> digits
+            else -> digits
+        }
+    }
+
     private fun resolveWhatsAppNumber(contact: String): String? {
         if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return null
         val wanted = normalizeCommand(contact)
@@ -675,26 +703,31 @@ class VoiceWakeService : Service() {
         try {
             contentResolver.query(
                 ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER),
+                arrayOf(
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                    ContactsContract.CommonDataKinds.Phone.NUMBER,
+                    ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER
+                ),
                 null, null, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " COLLATE NOCASE ASC"
             )?.use { cursor ->
                 val nameCol = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
                 val numberCol = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                val normalizedCol = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER)
                 while (cursor.moveToNext()) {
                     val name = if (nameCol >= 0) cursor.getString(nameCol).orEmpty() else ""
-                    val number = if (numberCol >= 0) cursor.getString(numberCol).orEmpty() else ""
-                    val digits = number.filter { it.isDigit() }
-                    if (digits.length >= 7 && contactMatchScore(wanted, name) >= 65) {
-                        matches.add(name to digits)
-                    }
+                    val rawNumber = if (numberCol >= 0) cursor.getString(numberCol).orEmpty() else ""
+                    val normalizedNumber = if (normalizedCol >= 0) cursor.getString(normalizedCol).orEmpty() else ""
+                    val number = normalizeWhatsAppNumber(rawNumber, normalizedNumber) ?: continue
+                    if (contactMatchScore(wanted, name) >= 65) matches.add(name to number)
                 }
             }
         } catch (_: SecurityException) { return null }
+
         val ranked = matches.distinctBy { it.second }
             .map { it to contactMatchScore(wanted, it.first) }
             .sortedByDescending { it.second }
         val best = ranked.firstOrNull() ?: return null
-        // Never guess when two different phone numbers are equally plausible.
+        // Never guess when two different numbers are similarly plausible.
         if (ranked.size > 1 && best.second - ranked[1].second < 8) return null
         return best.first.second
     }
