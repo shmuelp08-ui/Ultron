@@ -209,6 +209,12 @@ class VoiceWakeService : Service() {
             restartListening(pauseRemaining + 250L)
             return
         }
+        // Never arm Android SpeechRecognizer while either TTS engine is producing
+        // ULTRON audio. This prevents its own words (especially app names) becoming commands.
+        if (UltronVoice.isSpeaking()) {
+            restartListening(350L)
+            return
+        }
 
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             UltronSettings.save(this, "voice_status", "SPEECH RECOGNITION UNAVAILABLE — RETRYING")
@@ -395,6 +401,8 @@ class VoiceWakeService : Service() {
         for (spoken in options) {
             val utterance = spoken.trim()
             if (utterance.isBlank()) continue
+            // Drop any result delivered during playback, regardless of its wording.
+            if (UltronVoice.isSpeaking()) continue
             // Some recognizers return the tail end of ULTRON's TTS as a short
             // transcript. Drop phrases contained in ULTRON's recent reply.
             if (isRecentAssistantEcho(utterance)) continue
