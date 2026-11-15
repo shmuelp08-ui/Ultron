@@ -382,10 +382,20 @@ class VoiceWakeService : Service() {
     }
 
     private fun normalizeCommand(value: String): String {
-        return value.lowercase()
+        return value.lowercase(java.util.Locale.US)
             .replace(Regex("[^a-z0-9 ]"), " ")
             .replace(Regex("\\s+"), " ")
             .trim()
+            // Common family-name pronunciation variants produced by speech recognition.
+            .replace(Regex("\\bmomma\\b"), "mama")
+            .replace(Regex("\\bmamma\\b"), "mama")
+            .replace(Regex("\\bmommy\\b"), "mama")
+            .replace(Regex("\\bmother\\b"), "mama")
+            .replace(Regex("\\bpoppa\\b"), "papa")
+            .replace(Regex("\\bpappa\\b"), "papa")
+            .replace(Regex("\\bpapi\\b"), "papa")
+            .replace(Regex("\\bdaddy\\b"), "papa")
+            .replace(Regex("\\bfather\\b"), "papa")
     }
 
     private fun handleCommand(command: String) {
