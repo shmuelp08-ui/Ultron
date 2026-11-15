@@ -610,7 +610,7 @@ class VoiceWakeService : Service() {
         // The current utterance was saved at the top of handleCommand; exclude it
         // here because AIController appends the current message as the final turn.
         val recentConversation = UltronConversation.transcript(this)
-            .lineSequence().dropLast(1).joinToString("\n")
+            .lines().dropLast(1).joinToString("\n")
         updateNotification("ULTRON is thinking...")
         Thread {
             val answer = AIController.ask(
