@@ -618,6 +618,23 @@ class VoiceWakeService : Service() {
     }
 
     private fun handleWhatsAppCommand(command: String): Boolean {
+        // Explicit group-chat intent: search the existing WhatsApp Chats list,
+        // where group conversations appear, rather than the contact picker.
+        val groupMatch = listOf(
+            Regex("^(?:open|find|show|go to) (?:my )?(?:whatsapp )?(?:group|group chat) (.+)$"),
+            Regex("^(?:open|find|show|go to) (?:my )?whatsapp group chat (.+)$"),
+            Regex("^open group chat (.+) on whatsapp$")
+        ).firstNotNullOfOrNull { it.find(command) }
+        if (groupMatch != null) {
+            val groupName = groupMatch.groupValues[1].trim().removeSuffix(" on whatsapp").trim()
+            if (groupName.isBlank()) return false
+            val started = UltronAccessibilityService.openWhatsAppGroup(groupName)
+            val response = if (started) "Searching WhatsApp groups for $groupName."
+                else "I couldn't start group search. Make sure WhatsApp is installed and ULTRON Phone Control is enabled."
+            updateNotification(response)
+            speakResponse(response)
+            return true
+        }
         val contactAndMessage = listOf(
             Regex("^(?:send|text|message) (.+?) to (.+?) on whatsapp$"),
             Regex("^whatsapp message (.+?) to (.+)$"),
