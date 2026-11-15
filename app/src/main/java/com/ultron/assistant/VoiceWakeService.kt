@@ -356,28 +356,34 @@ class VoiceWakeService : Service() {
     private fun processSpeech(options: List<String>) {
         if (options.isEmpty()) return
 
-        // Try every recognition alternative; the first result is not always best.
+        // Voice listening is explicitly enabled by the user from ULTRON.
+        // Keep a continuous conversation while that foreground microphone service
+        // is active; the wake word remains optional rather than mandatory.
         for (spoken in options) {
-            if (spoken.isBlank()) continue
+            val utterance = spoken.trim()
+            if (utterance.isBlank()) continue
 
             if (waitingForCommand) {
                 waitingForCommand = false
-                handleCommand(spoken)
+                handleCommand(utterance)
                 return
             }
 
-            val wakeIndex = spoken.indexOf("ultron")
-            if (wakeIndex >= 0) {
-                val command = spoken.substring(wakeIndex + "ultron".length).trim()
-                if (command.isNotBlank()) {
-                    handleCommand(command)
-                } else {
-                    waitingForCommand = true
-                    UltronSettings.save(this, "voice_status", "ULTRON ACTIVATED — SAY COMMAND")
-                    updateNotification("ULTRON activated — speak now")
-                }
-                return
+            val wakeIndex = utterance.lowercase(java.util.Locale.US).indexOf("ultron")
+            val command = if (wakeIndex >= 0) {
+                utterance.substring(wakeIndex + "ultron".length).trim()
+            } else {
+                utterance
             }
+
+            if (command.isNotBlank()) {
+                handleCommand(command)
+            } else {
+                waitingForCommand = true
+                UltronSettings.save(this, "voice_status", "ULTRON ACTIVATED — SAY COMMAND")
+                updateNotification("ULTRON activated — speak now")
+            }
+            return
         }
     }
 
@@ -394,6 +400,19 @@ class VoiceWakeService : Service() {
     private fun handleCommand(command: String) {
         val spoken = normalizeCommand(command)
         if (spoken.isBlank()) return
+
+        // Preserve every user utterance so short follow-ups such as "yes",
+        // "no", "that one", and "send it" retain their conversational context.
+        UltronConversation.addTurn(this, "User", command)
+
+        if (spoken in listOf("stop listening", "turn off listening", "ultron stop listening", "go to sleep")) {
+            UltronSettings.save(this, "voice_enabled", "false")
+            UltronSettings.save(this, "voice_status", "VOICE OFF")
+            active = false
+            releaseWakeLock()
+            stopSelf()
+            return
+        }
 
         // Read the phone's real local clock; never ask the AI to guess the time.
         if (spoken.matches(Regex(".*\\b(time is it|current time|tell me the time|what time|the time)\\b.*"))) {
@@ -582,7 +601,6 @@ class VoiceWakeService : Service() {
         }
 
         val recentConversation = UltronConversation.transcript(this)
-        UltronConversation.addTurn(this, "User", command)
         updateNotification("ULTRON is thinking...")
         Thread {
             val answer = AIController.ask(
@@ -620,10 +638,28 @@ class VoiceWakeService : Service() {
     private fun handleWhatsAppCommand(command: String): Boolean {
         // Explicit group-chat intent: search the existing WhatsApp Chats list,
         // where group conversations appear, rather than the contact picker.
+        val sendToGroup = listOf(
+            Regex("^(?:send|text|message) (.+?) to (?:the )?(?:whatsapp )?(?:group|group chat) (.+)$"),
+            Regex("^send (.+?) to (.+?) group$")
+        ).firstNotNullOfOrNull { it.find(command) }
+        if (sendToGroup != null) {
+            val message = sendToGroup.groupValues[1].trim()
+            val groupName = sendToGroup.groupValues[2].trim()
+            if (message.isNotBlank() && groupName.isNotBlank()) {
+                val started = UltronAccessibilityService.openWhatsAppGroup(groupName, message)
+                val response = if (started) "Opening $groupName and preparing your message."
+                    else "I couldn't open that WhatsApp group. Check ULTRON Phone Control."
+                updateNotification(response)
+                speakResponse(response)
+                return true
+            }
+        }
+
         val groupMatch = listOf(
             Regex("^(?:open|find|show|go to) (?:my )?(?:whatsapp )?(?:group|group chat) (.+)$"),
             Regex("^(?:open|find|show|go to) (?:my )?whatsapp group chat (.+)$"),
-            Regex("^open group chat (.+) on whatsapp$")
+            Regex("^open group chat (.+) on whatsapp$"),
+            Regex("^(?:open|go to|show) (.+?) (?:whatsapp )?group chat$")
         ).firstNotNullOfOrNull { it.find(command) }
         if (groupMatch != null) {
             val groupName = groupMatch.groupValues[1].trim().removeSuffix(" on whatsapp").trim()
@@ -950,6 +986,7 @@ class VoiceWakeService : Service() {
 
     // Prevent the recognizer from hearing ULTRON's own spoken reply as a new command.
     private fun speakResponse(text: String) {
+        if (text.isNotBlank()) UltronConversation.addTurn(this, "ULTRON", text)
         voicePauseUntil = android.os.SystemClock.elapsedRealtime() +
             maxOf(2500L, text.length * 85L)
         UltronVoice.speak(this, text)
