@@ -613,15 +613,19 @@ class MainActivity : Activity() {
     private fun sendToAI() {
         val question = chatInput.text.toString().trim()
         if (question.isBlank() || chatBusy) return
-        val key = UltronSettings.get(this, "openai_api_key")
-        if (key.isNullOrBlank()) { chatLog.text = "Add your Groq API key in SETTINGS first."; return }
+        val geminiKey = UltronSettings.get(this, "gemini_api_key").orEmpty()
+        val groqKey = UltronSettings.get(this, "openai_api_key").orEmpty()
+        if (geminiKey.isBlank() && groqKey.isBlank()) {
+            chatLog.text = "Add your Gemini API key in SETTINGS. Your existing Groq key can be saved as backup."
+            return
+        }
         chatBusy = true
         chatInput.setText("")
         chatLog.text = "YOU: $question\n\nULTRON: Thinking…"
         val priorConversation = UltronConversation.transcript(this)
         UltronConversation.addTurn(this, "User", question)
         Thread {
-            val answer = AIController.ask(key, question, UltronMemory.recall(this), priorConversation)
+            val answer = AIController.ask(geminiKey, groqKey, question, UltronMemory.recall(this), priorConversation)
             UltronConversation.addTurn(this, "ULTRON", answer)
             runOnUiThread {
                 chatLog.text = "YOU: $question\n\nULTRON: $answer"
@@ -632,18 +636,19 @@ class MainActivity : Activity() {
     }
 
     private fun showSettings() {
-        val options = arrayOf("AI / Groq API key", "AssemblyAI voice setup", "WhatsApp notifications", "Calendar permission", "Weather location", "Saved memories", "App permissions", "Accessibility / phone control", "About / feature status")
+        val options = arrayOf("Gemini API key (primary)", "Groq API key (backup)", "AssemblyAI voice setup", "WhatsApp notifications", "Calendar permission", "Weather location", "Saved memories", "App permissions", "Accessibility / phone control", "About / feature status")
         AlertDialog.Builder(this).setTitle("ULTRON SETTINGS").setItems(options) { _, which ->
             when (which) {
-                0 -> credentialDialog("Groq API key", "openai_api_key")
-                1 -> configureAssemblyAIVoice()
-                2 -> startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                3 -> requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), 77)
-                4 -> usePhoneLocation()
-                5 -> showMemories()
-                6 -> openPermissionSettings()
-                7 -> openAccessibilitySettings()
-                8 -> showFeature("ULTRON feature status", "Included now: AI chat, saved memory, conversation history, live clock, weather, calendar, notifications, media controls, app launcher, notes, reminders section, routines section, web section, phone controls section, and voice-sample import. Some advanced integrations still need implementation and device testing.")
+                0 -> credentialDialog("Gemini API key (primary)", "gemini_api_key")
+                1 -> credentialDialog("Groq API key (automatic backup)", "openai_api_key")
+                2 -> configureAssemblyAIVoice()
+                3 -> startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                4 -> requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), 77)
+                5 -> usePhoneLocation()
+                6 -> showMemories()
+                7 -> openPermissionSettings()
+                8 -> openAccessibilitySettings()
+                9 -> showFeature("ULTRON feature status", "Gemini is the primary AI brain, with Groq as automatic backup. ULTRON keeps its local conversation history, saved memories, AssemblyAI cloned voice, app launcher, WhatsApp controls, and Android accessibility integration.")
             }
         }.show()
     }
