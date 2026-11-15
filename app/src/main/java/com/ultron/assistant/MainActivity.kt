@@ -44,10 +44,10 @@ import java.util.Locale
 import kotlin.math.max
 
 class MainActivity : Activity() {
-    private val cyan = Color.rgb(36, 205, 255)
-    private val cyanSoft = Color.rgb(110, 225, 255)
-    private val bg = Color.rgb(3, 9, 19)
-    private val panel = Color.rgb(7, 22, 38)
+    private val cyan = Color.rgb(255, 48, 64)
+    private val cyanSoft = Color.rgb(255, 125, 135)
+    private val bg = Color.rgb(7, 3, 5)
+    private val panel = Color.rgb(24, 7, 10)
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var root: LinearLayout
     private lateinit var clockText: TextView
@@ -757,9 +757,9 @@ class MainActivity : Activity() {
     private fun panelCard(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(13), dp(12), dp(13), dp(12))
-        background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(8, 29, 48), Color.rgb(4, 13, 26))).apply {
+        background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(42, 8, 13), Color.rgb(15, 4, 7))).apply {
             cornerRadius = dp(13).toFloat()
-            setStroke(dp(1), Color.rgb(18, 125, 177))
+            setStroke(dp(1), Color.rgb(180, 28, 43))
         }
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             setMargins(dp(3), dp(5), dp(3), dp(5))
@@ -767,7 +767,7 @@ class MainActivity : Activity() {
     }
 
     private fun panelDrawable() = GradientDrawable().apply {
-        setColor(Color.rgb(5, 17, 29)); cornerRadius = dp(9).toFloat(); setStroke(dp(1), Color.rgb(20, 116, 160))
+        setColor(Color.rgb(20, 5, 8)); cornerRadius = dp(9).toFloat(); setStroke(dp(1), Color.rgb(150, 24, 38))
     }
     private fun sectionTitle(value: String) = text(value, 12f, cyan, true).apply { setPadding(0, 0, 0, dp(9)) }
     private fun text(value: String, size: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
@@ -780,7 +780,7 @@ class MainActivity : Activity() {
     private fun buttonParams() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(0, dp(5), 0, dp(3)) }
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
         text = label; textSize = 10f; setTextColor(cyanSoft); isAllCaps = false
-        background = GradientDrawable().apply { setColor(Color.rgb(5, 24, 40)); cornerRadius = dp(8).toFloat(); setStroke(dp(1), Color.rgb(15, 130, 184)) }
+        background = GradientDrawable().apply { setColor(Color.rgb(28, 6, 10)); cornerRadius = dp(8).toFloat(); setStroke(dp(1), Color.rgb(210, 35, 52)) }
         setPadding(dp(5), dp(7), dp(5), dp(7)); setOnClickListener { action() }
     }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -806,7 +806,7 @@ class MainActivity : Activity() {
 
         init {
             setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-            contentDescription = "Animated blue holographic ULTRON AI core"
+            contentDescription = "Animated red holographic ULTRON AI core"
         }
 
         override fun onDraw(canvas: Canvas) {
@@ -816,17 +816,17 @@ class MainActivity : Activity() {
             val radius = max(1f, width.coerceAtMost(height) * .31f)
             val pulse = 0.94f + 0.06f * kotlin.math.sin(Math.toRadians(phase.toDouble())).toFloat()
 
-            // Soft blue aura and bright glass-like center.
+            // Soft red aura and bright glass-like center.
             paint.style = Paint.Style.FILL
             paint.shader = android.graphics.RadialGradient(
                 cx, cy, radius * 1.75f,
-                intArrayOf(Color.argb(105, 0, 185, 255), Color.argb(35, 0, 105, 255), Color.TRANSPARENT),
+                intArrayOf(Color.argb(115, 255, 24, 48), Color.argb(45, 150, 0, 20), Color.TRANSPARENT),
                 floatArrayOf(0f, .55f, 1f), android.graphics.Shader.TileMode.CLAMP
             )
             canvas.drawCircle(cx, cy, radius * 1.75f, paint)
             paint.shader = null
 
-            paint.color = Color.argb(90, 0, 185, 255)
+            paint.color = Color.argb(100, 230, 15, 38)
             paint.maskFilter = android.graphics.BlurMaskFilter(radius * .24f, android.graphics.BlurMaskFilter.Blur.NORMAL)
             canvas.drawCircle(cx, cy, radius * .82f * pulse, paint)
             paint.maskFilter = null
@@ -834,10 +834,10 @@ class MainActivity : Activity() {
             // Layered rotating orbital rings.
             paint.style = Paint.Style.STROKE
             paint.strokeCap = Paint.Cap.ROUND
-            paint.color = Color.argb(220, 75, 220, 255)
+            paint.color = Color.argb(235, 255, 65, 80)
             paint.strokeWidth = 1.5f
             canvas.drawCircle(cx, cy, radius * pulse, paint)
-            paint.color = Color.argb(150, 25, 150, 255)
+            paint.color = Color.argb(175, 190, 20, 42)
             paint.strokeWidth = 2.2f
             canvas.save()
             canvas.rotate(phase, cx, cy)
@@ -845,7 +845,7 @@ class MainActivity : Activity() {
             canvas.restore()
             canvas.save()
             canvas.rotate(-phase * .72f, cx, cy)
-            paint.color = Color.argb(190, 65, 205, 255)
+            paint.color = Color.argb(210, 255, 45, 65)
             paint.strokeWidth = 1.4f
             canvas.drawOval(cx - radius * .5f, cy - radius * 1.3f, cx + radius * .5f, cy + radius * 1.3f, paint)
             canvas.restore()
@@ -854,7 +854,7 @@ class MainActivity : Activity() {
             paint.style = Paint.Style.FILL
             paint.shader = android.graphics.RadialGradient(
                 cx - radius * .2f, cy - radius * .22f, radius * 1.05f,
-                intArrayOf(Color.WHITE, Color.rgb(125, 235, 255), Color.rgb(0, 135, 255), Color.argb(210, 0, 35, 125)),
+                intArrayOf(Color.WHITE, Color.rgb(255, 165, 170), Color.rgb(255, 35, 55), Color.argb(220, 90, 0, 15)),
                 floatArrayOf(0f, .16f, .62f, 1f), android.graphics.Shader.TileMode.CLAMP
             )
             canvas.drawCircle(cx, cy, radius * .72f * pulse, paint)
