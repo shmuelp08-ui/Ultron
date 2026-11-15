@@ -607,7 +607,10 @@ class VoiceWakeService : Service() {
             return
         }
 
+        // The current utterance was saved at the top of handleCommand; exclude it
+        // here because AIController appends the current message as the final turn.
         val recentConversation = UltronConversation.transcript(this)
+            .lineSequence().dropLast(1).joinToString("\n")
         updateNotification("ULTRON is thinking...")
         Thread {
             val answer = AIController.ask(
@@ -678,6 +681,17 @@ class VoiceWakeService : Service() {
             speakResponse(response)
             return true
         }
+        // Natural phrasing without the literal words "on WhatsApp" is accepted
+        // only when the recipient resolves to a real phone contact.
+        val plainSend = Regex("^(?:send|text|message) (.+?) to (.+)$").find(command)
+        if (plainSend != null) {
+            val message = plainSend.groupValues[1].trim()
+            val recipient = plainSend.groupValues[2].trim()
+            if (message.isNotBlank() && resolveWhatsAppNumber(recipient) != null) {
+                return openWhatsAppContact(recipient, message)
+            }
+        }
+
         val contactAndMessage = listOf(
             Regex("^(?:send|text|message) (.+?) to (.+?) on whatsapp$"),
             Regex("^whatsapp message (.+?) to (.+)$"),
